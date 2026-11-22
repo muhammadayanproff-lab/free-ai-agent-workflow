@@ -1,0 +1,77 @@
+name: Approved Meta Social Publishing
+
+on:
+  workflow_dispatch:
+    inputs:
+      approval:
+        description: "Only choose APPROVE after reviewing the campaign package"
+        required: true
+        type: choice
+        options:
+          - REJECT
+          - APPROVE
+      caption:
+        description: "Final approved caption (include hashtags)"
+        required: true
+        type: string
+      platforms:
+        description: "Where to publish"
+        required: true
+        default: "Instagram,Facebook"
+        type: choice
+        options:
+          - "Instagram,Facebook"
+          - "Instagram"
+          - "Facebook"
+      media_type:
+        description: "Media type for Instagram"
+        required: true
+        default: "image"
+        type: choice
+        options:
+          - "image"
+          - "video"
+      media_url:
+        description: "Public HTTPS image/video URL (required for Instagram)"
+        required: false
+        type: string
+      product_url:
+        description: "Optional Click and Collect product page URL for Facebook"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: inputs.approval == 'APPROVE'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Publish only after explicit approval
+        env:
+          PUBLISH_APPROVAL: ${{ inputs.approval }}
+          POST_CAPTION: ${{ inputs.caption }}
+          TARGET_PLATFORMS: ${{ inputs.platforms }}
+          MEDIA_TYPE: ${{ inputs.media_type }}
+          MEDIA_URL: ${{ inputs.media_url }}
+          PRODUCT_URL: ${{ inputs.product_url }}
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          META_IG_USER_ID: ${{ secrets.META_IG_USER_ID }}
+          META_GRAPH_API_VERSION: ${{ vars.META_GRAPH_API_VERSION }}
+        run: python agents/meta_publisher.py
+      - name: Save publishing receipt
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meta-publishing-receipt
+          path: publish_output/
+          retention-days: 30
