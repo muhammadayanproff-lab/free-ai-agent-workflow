@@ -1,0 +1,78 @@
+name: AI Product Promo Video Creator
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_prompt:
+        description: "Describe the product promotional image to generate"
+        required: true
+        type: string
+      video_title:
+        description: "Short product headline"
+        required: true
+        type: string
+      video_subtitle:
+        description: "Supporting benefit (only use verified product facts)"
+        required: false
+        type: string
+      video_cta:
+        description: "Call to action"
+        required: false
+        default: "Shop now"
+        type: string
+      duration:
+        description: "Video duration in seconds (6–30)"
+        required: true
+        default: "15"
+        type: choice
+        options:
+          - "10"
+          - "15"
+          - "20"
+          - "30"
+
+permissions:
+  contents: read
+
+jobs:
+  create-promo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Generate promotional product image
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          IMAGE_PROMPT: ${{ inputs.image_prompt }}
+        run: python agents/images_creator.py
+
+      - name: Create vertical promotional video
+        env:
+          VIDEO_TITLE: ${{ inputs.video_title }}
+          VIDEO_SUBTITLE: ${{ inputs.video_subtitle }}
+          VIDEO_CTA: ${{ inputs.video_cta }}
+          VIDEO_DURATION: ${{ inputs.duration }}
+        run: python agents/video_creator.py
+
+      - name: Upload video and source image
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-promo-video
+          path: |
+            generated_videos/*.mp4
+            generated_images/*
+          if-no-files-found: error
+          retention-days: 14
