@@ -1,0 +1,36 @@
+name: AI Researcher Agent
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 4 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download repository files
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run AI Researcher
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NICHES: "AI technology, social media trends, content creation"
+        run: python agents/researcher.py
+
+      - name: Save research report
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-research-report
+          path: reports/research_latest.md
+          if-no-files-found: error
+          retention-days: 7
