@@ -40,7 +40,7 @@ def fetch_public_product_page(url):
         return ""
     raw = re.sub(r"(?is)<(script|style|noscript).*?>.*?</\1>", " ", raw)
     raw = re.sub(r"(?s)<[^>]+>", " ", raw)
-    raw = unescape(re.sub(r"\\s+", " ", raw))
+    raw = unescape(re.sub(r"\s+", " ", raw))
     return raw[:10000]
 
 
