@@ -66,10 +66,10 @@ def latest_successful_run(workflow_file):
         "gh", "run", "list",
         "--repo", GITHUB_REPOSITORY,
         "--workflow", workflow_file,
-        "--status", "success",
-        "--limit", "1",
-        "--json", "databaseId",
-        "--jq", ".[0].databaseId // empty",
+        "--status", "completed",
+        "--limit", "20",
+        "--json", "databaseId,conclusion",
+        "--jq", "map(select(.conclusion == \"success\")) | .[0].databaseId // empty",
     ])
     return output
 
