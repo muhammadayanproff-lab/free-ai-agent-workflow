@@ -1,0 +1,39 @@
+name: AI Image Creator
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "Describe the image to generate"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  generate-image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate image
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          IMAGE_PROMPT: ${{ inputs.prompt }}
+        run: python agents/image_creator.py
+
+      - name: Upload generated image
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-generated-image
+          path: generated_images/
+          if-no-files-found: error
