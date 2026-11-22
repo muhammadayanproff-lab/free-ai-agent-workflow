@@ -5,7 +5,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 
-API_VERSION = os.getenv("META_GRAPH_API_VERSION", "v27.0").strip()
+API_VERSION = os.getenv("META_GRAPH_API_VERSION", "").strip() or "v27.0"
 
 def required(name):
     value = os.getenv(name, "").strip()
