@@ -1,0 +1,58 @@
+name: AI SEO and Caption Writer
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Topic or product to create SEO content for"
+        required: true
+        type: string
+      audience:
+        description: "Target audience"
+        required: false
+        default: "general audience"
+        type: string
+      platforms:
+        description: "Platforms (for example: Instagram, TikTok, YouTube)"
+        required: false
+        default: "Instagram, TikTok, YouTube"
+        type: string
+      keywords:
+        description: "Optional target keywords, separated by commas"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  seo-caption-writer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run SEO and Caption Writer
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CONTENT_TOPIC: ${{ inputs.topic }}
+          TARGET_AUDIENCE: ${{ inputs.audience }}
+          CONTENT_PLATFORM: ${{ inputs.platforms }}
+          TARGET_KEYWORDS: ${{ inputs.keywords }}
+        run: python agents/seo_caption_writer.py
+
+      - name: Upload SEO and caption report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seo-caption-report
+          path: reports/seo_content_latest.md
+          if-no-files-found: warn
+          retention-days: 7
