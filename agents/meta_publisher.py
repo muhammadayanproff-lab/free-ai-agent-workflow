@@ -75,6 +75,11 @@ def publish_facebook(page_id, token, caption, product_url, media_type, media_url
             raise RuntimeError("Facebook image requires a publicly accessible HTTPS media URL.")
         data = {"caption": caption, "url": media_url, "access_token": token}
         result = post_form(f"{base}/photos", data)
+    elif media_type == "video" and media_url:
+        if not media_url.startswith("https://"):
+            raise RuntimeError("Facebook video requires a publicly accessible HTTPS media URL.")
+        data = {"description": caption, "file_url": media_url, "access_token": token}
+        result = post_form(f"{base}/videos", data)
     else:
         data = {"message": caption, "access_token": token}
         if product_url:
