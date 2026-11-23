@@ -32,7 +32,7 @@ on:
           - "image"
           - "video"
       media_url:
-        description: "Optional. Leave blank to automatically use the latest generated image. Video needs a public HTTPS URL."
+        description: "Optional. Leave blank to automatically use the latest generated image or video."
         required: false
         type: string
       product_url:
