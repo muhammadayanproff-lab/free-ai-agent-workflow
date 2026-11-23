@@ -23,7 +23,7 @@ def get(path, fields):
 page = get(page_id, "id,name,instagram_business_account")
 if str(page.get("id")) != page_id:
     raise RuntimeError("Meta returned a different Page ID.")
-ig = get(ig_id, "id,username,account_type")
+ig = get(ig_id, "id,username")
 if str(ig.get("id")) != ig_id:
     raise RuntimeError("Meta returned a different Instagram account ID.")
 
