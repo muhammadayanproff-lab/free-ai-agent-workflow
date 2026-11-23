@@ -28,16 +28,16 @@ def upload_video(path):
     fields = {"api_key": key, "timestamp": timestamp, "folder": "click-and-collect", "signature": signature}
     body = bytearray()
     for name, value in fields.items():
-        body.extend(f"--{boundary}\\r\\n".encode())
-        body.extend(f'Content-Disposition: form-data; name="{name}"\\r\\n\\r\\n'.encode())
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
         body.extend(str(value).encode())
-        body.extend(b"\\r\\n")
-    body.extend(f"--{boundary}\\r\\n".encode())
-    body.extend(f'Content-Disposition: form-data; name="file"; filename="{Path(path).name}"\\r\\n'.encode())
-    body.extend(b"Content-Type: video/mp4\\r\\n\\r\\n")
+        body.extend(b"\r\n")
+    body.extend(f"--{boundary}\r\n".encode())
+    body.extend(f'Content-Disposition: form-data; name="file"; filename="{Path(path).name}"\r\n'.encode())
+    body.extend(b"Content-Type: video/mp4\r\n\r\n")
     body.extend(Path(path).read_bytes())
-    body.extend(b"\\r\\n")
-    body.extend(f"--{boundary}--\\r\\n".encode())
+    body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode())
     url = f"https://api.cloudinary.com/v1_1/{cloud}/video/upload"
     request = urllib.request.Request(url, data=bytes(body), headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, method="POST")
     try:
@@ -51,7 +51,7 @@ def upload_video(path):
     public_url = result.get("secure_url", "")
     if not public_url.startswith("https://"):
         raise RuntimeError("Cloudinary did not return a public HTTPS video URL.")
-    Path("generated_videos/video_url.txt").write_text(public_url + "\\n", encoding="utf-8")
+    Path("generated_videos/video_url.txt").write_text(public_url + "\n", encoding="utf-8")
     print("CLOUDINARY_VIDEO_UPLOAD_SUCCESS")
     print("Public video URL saved to generated_videos/video_url.txt")
 
