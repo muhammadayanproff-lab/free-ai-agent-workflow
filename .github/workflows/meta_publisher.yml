@@ -58,7 +58,7 @@ jobs:
           python-version: "3.11"
       - name: Get latest generated image URL
         id: latest_media
-        if: inputs.media_url == '' && contains(inputs.platforms, 'Instagram') && inputs.media_type == 'image'
+        if: inputs.media_url == '' && inputs.media_type == 'image'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
