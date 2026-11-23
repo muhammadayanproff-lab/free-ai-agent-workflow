@@ -1,0 +1,155 @@
+name: Daily AI Campaign Builder
+
+on:
+  workflow_dispatch:
+    inputs:
+      product_name:
+        description: "Product to research and promote (Markaz product name or supplier product)"
+        required: true
+        type: string
+      product_url:
+        description: "Optional public HTTPS product page"
+        required: false
+        type: string
+      product_price:
+        description: "Optional verified supplier price in PKR"
+        required: false
+        type: string
+      product_category:
+        description: "Optional product category"
+        required: false
+        type: string
+      product_notes:
+        description: "Optional verified details only"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-campaign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install video encoder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Research product opportunity with Pakistan news signals
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PRODUCT_NAME: ${{ inputs.product_name }}
+          PRODUCT_URL: ${{ inputs.product_url }}
+          PRODUCT_PRICE: ${{ inputs.product_price }}
+          PRODUCT_CATEGORY: ${{ inputs.product_category }}
+          PRODUCT_NOTES: ${{ inputs.product_notes }}
+        run: python agents/product_researcher.py
+
+      - name: Analyse related trend signals
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NICHES: ${{ inputs.product_name }}, ecommerce product trends, Pakistan online shopping
+        run: python agents/trend_analyst.py
+
+      - name: Generate AI creative brief automatically
+        id: creative
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PRODUCT_NAME: ${{ inputs.product_name }}
+          PRODUCT_NOTES: ${{ inputs.product_notes }}
+        run: python agents/video_campaign_brief.py
+
+      - name: Generate campaign image
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          IMAGE_PROMPT: ${{ steps.creative.outputs.image_prompt }}
+        run: python agents/images_creator.py
+
+      - name: Upload campaign image to Cloudinary
+        env:
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: python agents/cloudinary_uploader.py
+
+      - name: Generate SEO copy and social captions automatically
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CONTENT_TOPIC: ${{ inputs.product_name }}
+          TARGET_AUDIENCE: Pakistan online shoppers
+          CONTENT_PLATFORM: Instagram, Facebook
+          TARGET_KEYWORDS: ${{ inputs.product_name }}, Pakistan online shopping
+        run: python agents/seo_caption_writer.py
+
+      - name: Create vertical promotional video and upload it
+        env:
+          VIDEO_TITLE: ${{ steps.creative.outputs.video_title }}
+          VIDEO_SUBTITLE: ${{ steps.creative.outputs.video_subtitle }}
+          VIDEO_CTA: ${{ steps.creative.outputs.video_cta }}
+          VIDEO_DURATION: "15"
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: python agents/video_creator.py
+
+      - name: Assemble campaign review package
+        env:
+          PRODUCT_NAME: ${{ inputs.product_name }}
+          PRODUCT_URL: ${{ inputs.product_url }}
+        run: |
+          mkdir -p campaign_review
+          {
+            echo "# Click and Collect — Campaign Review"
+            echo
+            echo "**Product:** $PRODUCT_NAME"
+            echo "**Product page:** ${PRODUCT_URL:-Not supplied}"
+            echo
+            echo "> REVIEW ONLY. Nothing is published automatically. Check product facts, image, video and captions before approving."
+            echo
+            echo "## Product opportunity research"
+            cat product_research_output/product_opportunity_latest.md
+            echo
+            echo "## Trend analysis"
+            cat reports/trend_analysis_latest.md
+            echo
+            echo "## SEO and social captions"
+            cat reports/seo_content_latest.md
+            echo
+            echo "## Generated creative brief"
+            cat creative_output/auto_generated_creative_brief.json
+            echo
+            echo "## Public media URLs"
+            echo "- Image: $(cat media_output/image_url.txt)"
+            echo "- Video: $(cat generated_videos/video_url.txt)"
+          } > campaign_review/campaign_review.md
+          cp generated_images/* campaign_review/
+          cp generated_videos/*.mp4 campaign_review/
+          cp media_output/image_url.txt campaign_review/
+          cp generated_videos/video_url.txt campaign_review/
+
+      - name: Upload complete campaign package for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: click-and-collect-campaign-review
+          path: |
+            campaign_review/
+            product_research_output/
+            reports/trend_analysis_latest.md
+            reports/seo_content_latest.md
+            creative_output/
+            generated_images/
+            generated_videos/
+            media_output/
+          if-no-files-found: error
+          retention-days: 14
