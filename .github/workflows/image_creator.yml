@@ -31,9 +31,18 @@ jobs:
           IMAGE_PROMPT: ${{ inputs.prompt }}
         run: python agents/images_creator.py
 
-      - name: Upload generated image
+      - name: Upload image to Cloudinary
+        env:
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: python agents/cloudinary_uploader.py
+
+      - name: Save generated image and public URL
         uses: actions/upload-artifact@v4
         with:
-          name: ai-generated-image
-          path: generated_images/
+          name: ai-generated-image-and-url
+          path: |
+            generated_images/
+            media_output/
           if-no-files-found: error
