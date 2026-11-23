@@ -65,6 +65,9 @@ jobs:
           VIDEO_SUBTITLE: ${{ inputs.video_subtitle }}
           VIDEO_CTA: ${{ inputs.video_cta }}
           VIDEO_DURATION: ${{ inputs.duration }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
         run: python agents/video_creator.py
 
       - name: Upload video and source image
@@ -73,6 +76,7 @@ jobs:
           name: product-promo-video
           path: |
             generated_videos/*.mp4
+            generated_videos/video_url.txt
             generated_images/*
           if-no-files-found: error
           retention-days: 14
