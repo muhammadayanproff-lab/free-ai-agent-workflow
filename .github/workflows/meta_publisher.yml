@@ -56,21 +56,33 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Get latest generated image URL
+      - name: Get latest generated media URL
         id: latest_media
-        if: inputs.media_url == '' && inputs.media_type == 'image'
+        if: inputs.media_url == ''
         env:
           GH_TOKEN: ${{ github.token }}
+          MEDIA_TYPE: ${{ inputs.media_type }}
         run: |
-          RUN_ID=$(gh run list --workflow image_creator.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ "$MEDIA_TYPE" = "image" ]; then
+            WORKFLOW_FILE="image_creator.yml"
+            ARTIFACT_NAME="ai-generated-image-and-url"
+            URL_FILE="media_output/image_url.txt"
+            DOWNLOAD_DIR="downloaded-media"
+          else
+            WORKFLOW_FILE="video_creator.yml"
+            ARTIFACT_NAME="product-promo-video"
+            URL_FILE="generated_videos/video_url.txt"
+            DOWNLOAD_DIR="downloaded-media"
+          fi
+          RUN_ID=$(gh run list --workflow "$WORKFLOW_FILE" --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
-            echo "No successful AI Image Creator run was found. Run it first or provide a media URL."
+            echo "No successful media creation run found. Run the relevant creator first or provide a media URL."
             exit 1
           fi
-          gh run download "$RUN_ID" --name ai-generated-image-and-url --dir downloaded-media
-          URL=$(cat downloaded-media/media_output/image_url.txt)
+          gh run download "$RUN_ID" --name "$ARTIFACT_NAME" --dir "$DOWNLOAD_DIR"
+          URL=$(cat "$DOWNLOAD_DIR/$URL_FILE")
           if [ -z "$URL" ]; then
-            echo "The generated image URL file was empty."
+            echo "The generated public media URL file was empty."
             exit 1
           fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
