@@ -9,6 +9,52 @@ def required(name):
         raise RuntimeError(f"Missing required input: {name}")
     return value
 
+
+def upload_video(path):
+    import hashlib
+    import json
+    import time
+    import urllib.request
+    import uuid
+
+    cloud = required("CLOUDINARY_CLOUD_NAME")
+    key = required("CLOUDINARY_API_KEY")
+    secret = required("CLOUDINARY_API_SECRET")
+    timestamp = str(int(time.time()))
+    params = {"folder": "click-and-collect", "timestamp": timestamp}
+    to_sign = "&".join(f"{k}={params[k]}" for k in sorted(params))
+    signature = hashlib.sha1((to_sign + secret).encode("utf-8")).hexdigest()
+    boundary = "----CloudinaryVideo" + uuid.uuid4().hex
+    fields = {"api_key": key, "timestamp": timestamp, "folder": "click-and-collect", "signature": signature}
+    body = bytearray()
+    for name, value in fields.items():
+        body.extend(f"--{boundary}\\r\\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{name}"\\r\\n\\r\\n'.encode())
+        body.extend(str(value).encode())
+        body.extend(b"\\r\\n")
+    body.extend(f"--{boundary}\\r\\n".encode())
+    body.extend(f'Content-Disposition: form-data; name="file"; filename="{Path(path).name}"\\r\\n'.encode())
+    body.extend(b"Content-Type: video/mp4\\r\\n\\r\\n")
+    body.extend(Path(path).read_bytes())
+    body.extend(b"\\r\\n")
+    body.extend(f"--{boundary}--\\r\\n".encode())
+    url = f"https://api.cloudinary.com/v1_1/{cloud}/video/upload"
+    request = urllib.request.Request(url, data=bytes(body), headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=300) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        if hasattr(exc, "read"):
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Cloudinary video upload failed: {detail[:1000]}") from exc
+        raise
+    public_url = result.get("secure_url", "")
+    if not public_url.startswith("https://"):
+        raise RuntimeError("Cloudinary did not return a public HTTPS video URL.")
+    Path("generated_videos/video_url.txt").write_text(public_url + "\\n", encoding="utf-8")
+    print("CLOUDINARY_VIDEO_UPLOAD_SUCCESS")
+    print("Public video URL saved to generated_videos/video_url.txt")
+
 def main():
     image_dir = Path("generated_images")
     images = sorted(image_dir.glob("*"))
@@ -61,6 +107,7 @@ def main():
         raise RuntimeError("FFmpeg failed: " + result.stderr[-2500:])
 
     print(f"VIDEO_CREATED={output_path}")
+    upload_video(output_path)
     print(f"DURATION_SECONDS={duration}")
     print("FORMAT=MP4 1080x1920 vertical, H.264")
     print("NOTE=This is a motion-graphics promo from one still image, not a filmed or AI-generated scene.")
