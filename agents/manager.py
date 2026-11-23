@@ -31,7 +31,7 @@ ARTIFACT_SOURCES = [
     {
         "label": "Image Creator",
         "workflow": "image_creator.yml",
-        "artifact": "ai-generated-image",
+        "artifact": "ai-generated-image-and-url",
         "folder": "images",
         "expected": [],
     },
