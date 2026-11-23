@@ -68,14 +68,22 @@ def publish_instagram(ig_id, token, media_type, media_url, caption):
         raise RuntimeError("Instagram publish response did not include a media ID.")
     return result["id"]
 
-def publish_facebook(page_id, token, caption, product_url):
-    data = {"message": caption, "access_token": token}
-    if product_url:
-        data["link"] = product_url
-    result = post_form(f"https://graph.facebook.com/{API_VERSION}/{page_id}/feed", data)
-    if not result.get("id"):
+def publish_facebook(page_id, token, caption, product_url, media_type, media_url):
+    base = f"https://graph.facebook.com/{API_VERSION}/{page_id}"
+    if media_type == "image" and media_url:
+        if not media_url.startswith("https://"):
+            raise RuntimeError("Facebook image requires a publicly accessible HTTPS media URL.")
+        data = {"caption": caption, "url": media_url, "access_token": token}
+        result = post_form(f"{base}/photos", data)
+    else:
+        data = {"message": caption, "access_token": token}
+        if product_url:
+            data["link"] = product_url
+        result = post_form(f"{base}/feed", data)
+    post_id = result.get("post_id") or result.get("id")
+    if not post_id:
         raise RuntimeError("Facebook publish response did not include a post ID.")
-    return result["id"]
+    return post_id
 
 def main():
     approval = os.getenv("PUBLISH_APPROVAL", "").strip()
@@ -99,7 +107,7 @@ def main():
     if "facebook" in platforms:
         outcomes["facebook_post_id"] = publish_facebook(
             required("META_PAGE_ID"), required("META_PAGE_ACCESS_TOKEN"),
-            caption, product_url
+            caption, product_url, media_type, media_url
         )
     os.makedirs("publish_output", exist_ok=True)
     with open("publish_output/publish_receipt.json", "w", encoding="utf-8") as f:
