@@ -2,6 +2,7 @@ import os
 import subprocess
 from pathlib import Path
 from datetime import datetime, timezone
+from PIL import Image, ImageEnhance
 
 def required(name):
     value = os.environ.get(name, "").strip()
@@ -9,14 +10,8 @@ def required(name):
         raise RuntimeError(f"Missing required input: {name}")
     return value
 
-
 def upload_video(path):
-    import hashlib
-    import json
-    import time
-    import urllib.request
-    import uuid
-
+    import hashlib, json, time, urllib.request, uuid
     cloud = required("CLOUDINARY_CLOUD_NAME")
     key = required("CLOUDINARY_API_KEY")
     secret = required("CLOUDINARY_API_SECRET")
@@ -30,13 +25,11 @@ def upload_video(path):
     for name, value in fields.items():
         body.extend(f"--{boundary}\r\n".encode())
         body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
-        body.extend(str(value).encode())
-        body.extend(b"\r\n")
+        body.extend(str(value).encode()); body.extend(b"\r\n")
     body.extend(f"--{boundary}\r\n".encode())
     body.extend(f'Content-Disposition: form-data; name="file"; filename="{Path(path).name}"\r\n'.encode())
     body.extend(b"Content-Type: video/mp4\r\n\r\n")
-    body.extend(Path(path).read_bytes())
-    body.extend(b"\r\n")
+    body.extend(Path(path).read_bytes()); body.extend(b"\r\n")
     body.extend(f"--{boundary}--\r\n".encode())
     url = f"https://api.cloudinary.com/v1_1/{cloud}/video/upload"
     request = urllib.request.Request(url, data=bytes(body), headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, method="POST")
@@ -55,9 +48,24 @@ def upload_video(path):
     print("CLOUDINARY_VIDEO_UPLOAD_SUCCESS")
     print("Public video URL saved to generated_videos/video_url.txt")
 
+def center_crop_portrait(image_path, output_path):
+    image = Image.open(image_path).convert("RGB")
+    w, h = image.size
+    ratio = 9 / 16
+    if w / h > ratio:
+        crop_w = int(h * ratio)
+        left = max(0, (w - crop_w) // 2)
+        image = image.crop((left, 0, left + crop_w, h))
+    else:
+        crop_h = int(w / ratio)
+        top = max(0, (h - crop_h) // 2)
+        image = image.crop((0, top, w, top + crop_h))
+    image = ImageEnhance.Sharpness(image).enhance(1.1)
+    image.resize((1080, 1920), Image.Resampling.LANCZOS).save(output_path, quality=95)
+
 def main():
     image_dir = Path("generated_images")
-    images = sorted(image_dir.glob("*"))
+    images = sorted(p for p in image_dir.glob("*") if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"})
     image_path = Path(os.environ.get("INPUT_IMAGE", "").strip()) if os.environ.get("INPUT_IMAGE", "").strip() else (images[-1] if images else None)
     if not image_path or not image_path.is_file():
         raise RuntimeError("No input image found. Generate an image first or provide INPUT_IMAGE.")
@@ -66,15 +74,15 @@ def main():
     subtitle = os.environ.get("VIDEO_SUBTITLE", "Discover it today").strip()
     cta = os.environ.get("VIDEO_CTA", "Shop now").strip()
     duration = int(os.environ.get("VIDEO_DURATION", "15"))
-    if duration < 6 or duration > 30:
-        raise RuntimeError("VIDEO_DURATION must be between 6 and 30 seconds.")
+    if duration < 10 or duration > 30:
+        raise RuntimeError("VIDEO_DURATION must be between 10 and 30 seconds.")
 
-    output_dir = Path("generated_videos")
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path("generated_videos"); output_dir.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     output_path = output_dir / f"product_promo_{stamp}.mp4"
+    portrait_path = output_dir / "product_portrait_1080x1920.jpg"
+    center_crop_portrait(image_path, portrait_path)
 
-    # Use text files to avoid shell/drawtext escaping problems with product names.
     title_file = output_dir / "title.txt"
     subtitle_file = output_dir / "subtitle.txt"
     cta_file = output_dir / "cta.txt"
@@ -86,31 +94,32 @@ def main():
     frames = duration * fps
     font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
     vf = (
-        "scale=1080:1920:force_original_aspect_ratio=increase,"
-        "crop=1080:1920,"
-        f"zoompan=z='min(zoom+0.0007,1.06)':d={frames}:s=1080x1920:fps={fps},"
+        f"zoompan=z='min(zoom+0.00012,1.055)':d={frames}:s=1080x1920:fps={fps},"
         f"drawtext=fontfile={font}:textfile={title_file}:fontcolor=white:fontsize=64:"
-        "box=1:boxcolor=black@0.48:boxborderw=24:x=(w-text_w)/2:y=h*0.12,"
+        "box=1:boxcolor=black@0.48:boxborderw=24:x=(w-text_w)/2:y=h*0.10,"
         f"drawtext=fontfile={font}:textfile={subtitle_file}:fontcolor=white:fontsize=38:"
-        "box=1:boxcolor=black@0.42:boxborderw=18:x=(w-text_w)/2:y=h*0.22,"
+        "box=1:boxcolor=black@0.42:boxborderw=18:x=(w-text_w)/2:y=h*0.19,"
         f"drawtext=fontfile={font}:textfile={cta_file}:fontcolor=white:fontsize=52:"
-        "box=1:boxcolor=0x146B45@0.92:boxborderw=24:x=(w-text_w)/2:y=h*0.82"
+        "box=1:boxcolor=0x146B45@0.92:boxborderw=24:x=(w-text_w)/2:y=h*0.84,"
+        "format=yuv420p"
     )
-    command = [
-        "ffmpeg", "-y", "-loop", "1", "-i", str(image_path),
-        "-vf", vf, "-t", str(duration), "-r", str(fps),
-        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart", str(output_path)
-    ]
+    command = ["ffmpeg","-y","-loop","1","-i",str(portrait_path),"-vf",vf,"-t",str(duration),
+               "-r",str(fps),"-an","-c:v","libx264","-preset","slow","-crf","18",
+               "-pix_fmt","yuv420p","-movflags","+faststart",str(output_path)]
     result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode != 0:
+    if result.returncode:
         raise RuntimeError("FFmpeg failed: " + result.stderr[-2500:])
-
+    probe = subprocess.run(["ffprobe","-v","error","-show_entries","stream=width,height,r_frame_rate","-show_entries","format=duration","-of","default=noprint_wrappers=1",str(output_path)],capture_output=True,text=True)
+    if probe.returncode:
+        raise RuntimeError("Could not verify the output video.")
+    details = probe.stdout
+    if "width=1080" not in details or "height=1920" not in details:
+        raise RuntimeError("Output failed 1080x1920 portrait validation: " + details)
     print(f"VIDEO_CREATED={output_path}")
+    print(details)
     upload_video(output_path)
-    print(f"DURATION_SECONDS={duration}")
-    print("FORMAT=MP4 1080x1920 vertical, H.264")
-    print("NOTE=This is a motion-graphics promo from one still image, not a filmed or AI-generated scene.")
+    print("FORMAT=MP4, 1080x1920 (9:16), 30 FPS, H.264, 10-30 seconds")
+    print("NOTE=This is a stable product-photo motion showcase, not generative AI footage; the source product pixels are preserved.")
 
 if __name__ == "__main__":
     main()
