@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 
 API_KEY = os.environ["GEMINI_API_KEY"]
 MODEL = "gemini-3.5-flash-lite"
+NEWS_GEO = os.getenv("NEWS_GEO", "PK").upper()
+NEWS_HL = os.getenv("NEWS_HL", "en-PK")
 
 NICHES = [
     x.strip()
