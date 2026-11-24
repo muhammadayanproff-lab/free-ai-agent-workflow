@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 
 API_KEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL = "gemini-3.5-flash-lite"
+TRENDS_GEO = os.getenv("TRENDS_GEO", "PK").upper()
+NEWS_GEO = os.getenv("NEWS_GEO", "PK").upper()
+NEWS_HL = os.getenv("NEWS_HL", "en-PK")
 
 NICHES = [
     x.strip()
@@ -49,7 +52,7 @@ def collect_trends():
     # Google Trends: currently popular Google searches.
     try:
         trends = fetch_rss(
-            "https://trends.google.com/trending/rss?geo=US",
+            f"https://trends.google.com/trending/rss?geo={TRENDS_GEO}",
             "Google Trends",
             20
         )
