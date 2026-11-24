@@ -3,7 +3,7 @@
 This notebook no longer downloads or runs Stable Video Diffusion XT. The previous SVD-XT run produced only 25 frames at 7 FPS (3.57 seconds) in landscape 1024x576, and changed product details.
 
 ## Run once
-1. Open `click_collect_svd_xt.ipynb` in Kaggle.
+1. Open `click_collect_vertical_video.ipynb` in Kaggle.
 2. Replace `IMAGE_URL` with a clean, public HTTPS product photo URL.
 3. Click Run All.
 4. Download `click_collect_vertical_15s.mp4` from Kaggle Output.
