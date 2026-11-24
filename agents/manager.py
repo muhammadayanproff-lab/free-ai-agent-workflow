@@ -42,6 +42,20 @@ ARTIFACT_SOURCES = [
         "folder": "seo",
         "expected": ["seo_content_latest.md"],
     },
+    {
+        "label": "Product Opportunity Researcher",
+        "workflow": "product_researcher.yml",
+        "artifact": "product-opportunity-review",
+        "folder": "product_research",
+        "expected": ["product_opportunity_latest.md", "product_evidence_latest.json"],
+    },
+    {
+        "label": "Video Creator",
+        "workflow": "video_creator.yml",
+        "artifact": "product-promo-video",
+        "folder": "video",
+        "expected": ["video_url.txt"],
+    },
 ]
 
 MAX_FILE_CHARS = 18000
@@ -167,7 +181,7 @@ def ask_gemini(inventory, source_text):
     prompt = f"""
 You are the Manager Agent for a small AI content production workflow.
 
-Review the supplied outputs from four agents:
+Review the supplied outputs from these agents:
 - Researcher: topic research and source links.
 - Trend Analyst: trend evidence and content opportunities.
 - Image Creator: generated image artifact availability (the image pixels are
