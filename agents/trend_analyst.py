@@ -69,7 +69,7 @@ def collect_trends():
             url = (
                 "https://news.google.com/rss/search?q="
                 + query
-                + "&hl=en-US&gl=US&ceid=US:en"
+                + "&hl=" + urllib.parse.quote(NEWS_HL) + "&gl=" + NEWS_GEO + "&ceid=" + NEWS_GEO + ":en"
             )
 
             articles = fetch_rss(url, "Google News", 8)
