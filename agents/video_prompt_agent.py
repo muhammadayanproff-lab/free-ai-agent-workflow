@@ -23,6 +23,7 @@ The single prompt must preserve the exact product identity, silhouette, proporti
     for path in image_paths:
         mime=mimetypes.guess_type(path.name)[0] or "image/jpeg"
         parts.append({"inlineData":{"mimeType":mime,"data":base64.b64encode(path.read_bytes()).decode("ascii")}})
+    prompt_text = parts[0]["text"]
     endpoint=f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     body={"contents":[{"role":"user","parts":parts}],"generationConfig":{"temperature":0.2,"maxOutputTokens":3500}}
     req=urllib.request.Request(endpoint,data=json.dumps(body).encode(),headers={"Content-Type":"application/json","x-goog-api-key":API_KEY},method="POST")
@@ -53,7 +54,7 @@ The single prompt must preserve the exact product identity, silhouette, proporti
         parts=result.get("candidates",[{}])[0].get("content",{}).get("parts",[])
         answer="\n".join(x.get("text","") for x in parts if x.get("text")).strip()
     else:
-        answer = groq_chat(parts[0]["text"], max_tokens=3500, image_paths=image_paths) or ""
+        answer = groq_chat(prompt_text, max_tokens=3500, image_paths=image_paths) or ""
     if "ONE FINAL VIDEO PROMPT" not in answer.upper() or len(answer)<250:
         print("Gemini response did not meet the required format; retrying with Groq vision.")
         answer = groq_chat(parts[0]["text"], max_tokens=3500, image_paths=image_paths) or ""
