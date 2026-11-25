@@ -35,6 +35,8 @@ jobs:
         with:
           path: docs
           retention-days: 1
+      - name: Wait for Pages artifact metadata to become available
+        run: sleep 15
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
