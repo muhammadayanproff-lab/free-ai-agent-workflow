@@ -34,7 +34,7 @@ $("upload").addEventListener("click",async()=>{
  if(file.size>100*1024*1024){$("status").textContent="Video is larger than 100 MB. Compress it or use Cloudinary Media Library.";return}
  const button=$("upload");button.disabled=true;$("status").textContent="Uploading… please keep this page open.";
  try{
-  const form=new FormData();form.append("file",file);form.append("upload_preset",preset);form.append("folder","click-and-collect/manual-videos");
+  const form=new FormData();form.append("file",file);form.append("upload_preset",preset);form.append("folder","click-and-collect/manual-videos");form.append("tags","click_collect_campaign_video");
   const response=await fetch("https://api.cloudinary.com/v1_1/"+encodeURIComponent(cloud)+"/video/upload",{method:"POST",body:form});
   const data=await response.json();
   if(!response.ok||!data.secure_url)throw new Error(data.error?.message||"Cloudinary upload failed.");
