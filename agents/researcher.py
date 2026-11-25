@@ -304,9 +304,51 @@ RSS COLLECTION ERRORS:
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Gemini returned invalid product selection JSON: {text[:1200]}") from exc
 
+def preflight_gemini_model():
+    """Check Gemini availability before spending time crawling the catalogue."""
+    global MODEL
+    fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
+    candidates = [MODEL] if MODEL == fallback_model else [MODEL, fallback_model]
+    errors = []
+    for model_name in candidates:
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        body = {
+            "contents": [{"parts": [{"text": "Reply with the single word OK."}]}],
+            "generationConfig": {"temperature": 0, "maxOutputTokens": 8}
+        }
+        request = urllib.request.Request(
+            endpoint, data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY},
+            method="POST"
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=25) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            if not result.get("candidates"):
+                raise RuntimeError(f"Gemini preflight on {model_name} returned no candidate response.")
+            MODEL = model_name
+            print(f"Gemini preflight passed. This run will use {MODEL}.")
+            return
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", "replace")
+            errors.append(f"{model_name} HTTP {error.code}: {detail[:400]}")
+            if error.code not in (408, 429, 500, 502, 503, 504):
+                raise RuntimeError(f"Gemini preflight failed ({error.code}) for {model_name}: {detail[:800]}") from error
+            print(f"Gemini preflight: {model_name} unavailable (HTTP {error.code}).")
+        except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
+            errors.append(f"{model_name} network/timeout: {error}")
+            print(f"Gemini preflight: {model_name} unavailable ({error}).")
+    raise RuntimeError(
+        "Gemini preflight failed for primary and fallback models. "
+        "Stopped before Markaz crawling to avoid wasting runner time. "
+        + " | ".join(errors)
+    )
+
+
 def main():
     if not API_KEY:
         raise RuntimeError("GEMINI_API_KEY secret is missing.")
+    preflight_gemini_model()
     products, crawl_errors = crawl_markaz_shop()
     rss_signals, rss_errors = collect_rss_signals()
     try:
