@@ -51,11 +51,14 @@ Market analysis: {analysis[:7000]}
                 time.sleep(min(30,5*(2**attempt)))
     if data is None:
         print(f"{gemini_error or 'Gemini is not configured.'} Trying Groq fallback.")
+    prompts = []
     if data is not None:
         text="\n".join(p.get("text","") for p in data.get("candidates",[{}])[0].get("content",{}).get("parts",[]) if p.get("text"))
-        try: prompts=json.loads(text).get("prompts",[])
-        except Exception as exc: raise RuntimeError(f"Invalid image prompt JSON: {text[:700]}") from exc
-    else:
+        try:
+            prompts=json.loads(text).get("prompts",[])
+        except Exception as exc:
+            print(f"Gemini returned invalid image-prompt JSON ({exc}); trying Groq.")
+    if len(prompts) != 3:
         fallback = groq_chat(prompt, max_tokens=2500, json_mode=True)
         prompts = fallback.get("prompts", []) if isinstance(fallback, dict) else []
     if len(prompts)!=3 or not all(isinstance(x,str) and len(x)>30 for x in prompts): raise RuntimeError("Gemini and Groq did not return exactly three usable image prompts. Check GROQ_API_KEY access and provider quotas.")
