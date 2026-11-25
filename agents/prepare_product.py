@@ -6,11 +6,7 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
-PRODUCT_URL = os.getenv("PRODUCT_URL", "").strip()
 COD_CONFIRMED = os.getenv("MARKAZ_COD_CONFIRMED", "").strip().upper() == "YES"
-PRICE_OVERRIDE = os.getenv("PRODUCT_PRICE", "").strip()
-TITLE_OVERRIDE = os.getenv("PRODUCT_TITLE", "").strip()
-IMAGE_OVERRIDE = os.getenv("PRODUCT_IMAGE_URL", "").strip()
 
 class DetailParser(HTMLParser):
     def __init__(self):
@@ -63,22 +59,35 @@ def find_products(value):
 
 def main():
     if not COD_CONFIRMED:
-        raise RuntimeError("Open this exact product in Markaz Pakistan Shop and confirm COD before continuing.")
-    parsed = urllib.parse.urlparse(PRODUCT_URL)
+        raise RuntimeError("Confirm COD on the exact selected product in Markaz Pakistan Shop before campaign preparation.")
+    selected_path = Path("product_discovery/selected_product.json")
+    if not selected_path.is_file():
+        raise RuntimeError("Latest successful Product Discovery artifact has no selected product. Run Product Discovery and review its report first.")
+    selected = json.loads(selected_path.read_text(encoding="utf-8"))
+    product_url = str(selected.get("product_url", "")).strip()
+    title_override = str(selected.get("title", "")).strip()
+    price_override = str(selected.get("price_pkr", "")).strip()
+    category = str(selected.get("category", "")).strip()
+    image_override = ""
+    images_from_listing = selected.get("image_urls", [])
+    if images_from_listing:
+        image_override = str(images_from_listing[0]).strip()
+
+    parsed = urllib.parse.urlparse(product_url)
     if parsed.scheme != "https" or parsed.hostname not in {"www.markaz.app", "markaz.app"}:
-        raise RuntimeError("PRODUCT_URL must be an HTTPS Markaz public product URL.")
+        raise RuntimeError("Selected product URL is not an HTTPS Markaz URL.")
     if not parsed.path.startswith("/shop/product/") or "/china/" in parsed.path.lower():
         raise RuntimeError("Only public Markaz Pakistan Shop product URLs are accepted; China URLs are blocked.")
 
-    request = urllib.request.Request(PRODUCT_URL, headers={"User-Agent": "Mozilla/5.0 (compatible; ClickCollectProductVerifier/1.0)"})
+    request = urllib.request.Request(product_url, headers={"User-Agent": "Mozilla/5.0 (compatible; ClickCollectProductVerifier/1.0)"})
     try:
         with urllib.request.urlopen(request, timeout=45) as response:
             html = response.read(8_000_001).decode("utf-8", errors="replace")
         if len(html) >= 8_000_000:
             raise RuntimeError("Markaz product page exceeded the safety read limit.")
     except Exception as exc:
-        if not (TITLE_OVERRIDE and IMAGE_OVERRIDE.startswith("https://")):
-            raise RuntimeError(f"Could not fetch the Markaz product page ({exc}). If temporarily blocked, provide the title and main image URL from the discovery report.") from exc
+        if not (title_override and image_override.startswith("https://")):
+            raise RuntimeError(f"Could not fetch Markaz product page ({exc}); selected listing did not contain a usable title and image fallback.") from exc
         html = ""
 
     parser = DetailParser()
@@ -96,25 +105,27 @@ def main():
         offers = offers[0] if offers else {}
     if not isinstance(offers, dict):
         offers = {}
+
     images = product.get("image", [])
     if isinstance(images, str):
         images = [images]
-    images = [urllib.parse.urljoin(PRODUCT_URL, x) for x in images if isinstance(x, str)]
+    images = [urllib.parse.urljoin(product_url, value) for value in images if isinstance(value, str)]
     images.extend(parser.images)
-    if IMAGE_OVERRIDE.startswith("https://"):
-        images.insert(0, IMAGE_OVERRIDE)
+    if image_override.startswith("https://"):
+        images.insert(0, image_override)
     og_image = parser.meta.get("og:image", "")
     if og_image:
-        images.insert(0, urllib.parse.urljoin(PRODUCT_URL, og_image))
+        images.insert(0, urllib.parse.urljoin(product_url, og_image))
     unique_images = []
     for image in images:
         if image.startswith("https://") and image not in unique_images:
             unique_images.append(image)
 
-    title = product.get("name") or parser.meta.get("og:title") or parser.meta.get("twitter:title", "") or TITLE_OVERRIDE
+    title = product.get("name") or parser.meta.get("og:title") or parser.meta.get("twitter:title", "") or title_override
     description = product.get("description") or parser.meta.get("description") or parser.meta.get("og:description", "")
-    price = PRICE_OVERRIDE or str(offers.get("price") or parser.meta.get("product:price:amount") or "")
-    sku = str(product.get("sku") or re.search(r"/(\d+)$", parsed.path).group(1) if re.search(r"/(\d+)$", parsed.path) else "")
+    price = price_override or str(offers.get("price") or parser.meta.get("product:price:amount") or "")
+    id_match = re.search(r"/(\d+)$", parsed.path)
+    product_id = str(product.get("sku") or (id_match.group(1) if id_match else selected.get("product_id", "")))
     variants = []
     for key in ("color", "size", "material", "model"):
         if product.get(key):
@@ -123,12 +134,12 @@ def main():
     if not title:
         title = text_excerpt[:180].strip()
     if not unique_images:
-        raise RuntimeError("Could not extract original supplier images from this Markaz product page.")
+        raise RuntimeError("No original Markaz product image could be extracted or recovered from discovery data.")
     if not title:
-        raise RuntimeError("Could not extract product title from the Markaz page.")
+        raise RuntimeError("No product title could be extracted from the Markaz listing.")
 
-    out = Path("source_product_images")
-    out.mkdir(exist_ok=True)
+    output = Path("source_product_images")
+    output.mkdir(exist_ok=True)
     saved = []
     for index, url in enumerate(unique_images[:8], start=1):
         try:
@@ -140,35 +151,36 @@ def main():
                 data = response.read(12_000_001)
             if len(data) > 12_000_000:
                 continue
-            ext = ".png" if "png" in content_type else ".webp" if "webp" in content_type else ".jpg"
-            path = out / f"markaz_{index:02d}{ext}"
+            extension = ".png" if "png" in content_type else ".webp" if "webp" in content_type else ".jpg"
+            path = output / f"markaz_{index:02d}{extension}"
             path.write_bytes(data)
             saved.append(str(path))
         except Exception as exc:
             print(f"Image download skipped: {url}: {exc}")
     if not saved:
-        raise RuntimeError("No original product images could be downloaded from Markaz.")
+        raise RuntimeError("No original product photos could be downloaded.")
 
     data = {
-        "product_id": sku,
+        "product_id": product_id,
         "title": title,
-        "product_url": PRODUCT_URL,
-        "price_pkr": price or "Not extracted — confirm on Markaz page",
+        "product_url": product_url,
+        "price_pkr": price or "Not extracted — verify current price on Markaz",
         "description": description,
-        "category": os.getenv("PRODUCT_CATEGORY", ""),
+        "category": category,
         "brand": product.get("brand", ""),
         "variants": variants,
         "json_ld_product_data": product,
         "page_text_excerpt": text_excerpt,
+        "discovery_assessment": selected.get("research_assessment", {}),
         "image_urls": unique_images[:8],
         "local_image_files": saved,
-        "catalog_source": "Public Markaz Pakistan Shop product page (/shop/product/)",
+        "catalog_source": "Public Markaz Pakistan Shop listing and product page",
         "cod_confirmed_by_owner": True,
-        "cod_verification_note": "Owner confirmed COD on this exact Pakistan product checkout. Not a live private API check.",
+        "cod_verification_note": "Owner confirmed COD on this exact Pakistan product checkout. This is not a live private API verification.",
     }
     Path("product_data").mkdir(exist_ok=True)
     Path("product_data/product.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"Verified public Markaz Pakistan listing: {title}; downloaded {len(saved)} original images.")
+    print(f"Prepared selected Markaz product: {title}; {len(saved)} original photos downloaded.")
 
 if __name__ == "__main__":
     main()

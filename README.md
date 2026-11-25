@@ -6,13 +6,13 @@ The repository now centers on Pakistani product discovery, public Markaz Pakista
 
 1. **Pakistan Product Discovery** crawls public product cards from Markaz Pakistan Shop category pages (never Markaz China), collects Pakistan Google Trends and News RSS, and uses Gemini Google Search grounding to research Pakistani demand, customer problems, competitor products and publicly indexed creative examples.
 2. **Product selection** ranks only products found in the live Markaz Pakistan Shop crawl. The report includes the exact public product URL, listed price, category, images, stock label (if shown), and evidence/risks.
-3. **Markaz COD gate**: open the exact product URL in Pakistan Shop and confirm COD at checkout. Campaign preparation is blocked unless you explicitly confirm this. Public category pages describe COD availability, but a live item-specific checkout confirmation is still required.
+3. **Automatic handoff & Markaz COD gate**: the Campaign Assets workflow automatically downloads the latest selected product from the discovery artifact. You only confirm that you opened this exact item in Pakistan Shop and COD is available at checkout; campaign preparation is blocked unless you confirm.
 4. **Market Analysis Agent** searches for product demand, reviews, competitor products and creative examples; it distinguishes evidence from hypotheses and does not invent sales or ROAS.
 5. **Image Creator** generates three AI concept creatives. Original Markaz supplier images are downloaded and preserved separately for product-fidelity review; generated images may alter product details.
 6. **Image Analysis & Video Prompt Agent** analyzes original product photos and creates exactly one copy-ready 10–15 second, 9:16 video prompt.
 7. **Manual video upload**: use the upload page at `/upload-video.html` after it is deployed. Upload your externally generated video to Cloudinary and copy its public HTTPS URL.
 8. **SEO & Caption Agent** creates four separate captions: Instagram image, Facebook image, Instagram Reel and Facebook video.
-9. **Approval & Publishing**: choose APPROVE only after reviewing everything. The publishing workflow automatically downloads the latest campaign captions and image URLs; you select an AI concept or the original supplier photo, paste the uploaded video URL, select platforms and choose APPROVE.
+9. **Approval & Publishing**: choose APPROVE only after reviewing everything. The publishing workflow automatically downloads the latest campaign captions and image URLs; you select an AI concept or original supplier photo, paste the uploaded video URL, select platforms and choose APPROVE.
 
 ## Required GitHub Actions secrets
 

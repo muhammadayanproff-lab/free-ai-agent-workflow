@@ -2,53 +2,41 @@ name: Prepare Product Campaign Assets
 on:
   workflow_dispatch:
     inputs:
-      product_url:
-        description: "Exact Markaz Pakistan Shop product URL from the discovery report"
-        required: true
-        type: string
       cod_confirmed:
-        description: "Confirm you opened this exact product in Pakistan Shop and COD is available at checkout"
+        description: "Confirm you opened the recommended product from the latest report in Markaz Pakistan Shop and COD is available at checkout"
         required: true
         type: choice
         options: ["NO", "YES"]
-      product_category:
-        description: "Optional product category from the discovery report"
-        required: false
-        type: string
-      product_price:
-        description: "Optional current PKR price copied from the discovery report if page extraction is unavailable"
-        required: false
-        type: string
-      product_title:
-        description: "Optional exact title from the discovery report, used only if Markaz page fetch fails"
-        required: false
-        type: string
-      product_image_url:
-        description: "Optional main product image URL from the discovery report, used only if page fetch fails"
-        required: false
-        type: string
 permissions:
   contents: read
+  actions: read
 jobs:
   prepare:
     if: inputs.cod_confirmed == 'YES'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Verify public Markaz Pakistan listing and download original photos
+      - name: Download latest successful Pakistan Product Discovery result
         env:
-          PRODUCT_URL: ${{ inputs.product_url }}
-          PRODUCT_CATEGORY: ${{ inputs.product_category }}
-          PRODUCT_PRICE: ${{ inputs.product_price }}
-          PRODUCT_TITLE: ${{ inputs.product_title }}
-          PRODUCT_IMAGE_URL: ${{ inputs.product_image_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow product_discovery.yml --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion == "success")) | .[0].databaseId // empty')
+          if [ -z "$RUN_ID" ]; then
+            echo "No successful Product Discovery run found. Run Product Discovery first."
+            exit 1
+          fi
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name pakistan-product-discovery --dir product_discovery
+          test -f product_discovery/selected_product.json
+      - name: Verify selected Pakistan Shop listing and download original photos
+        env:
           MARKAZ_COD_CONFIRMED: ${{ inputs.cod_confirmed }}
         run: python agents/prepare_product.py
-      - name: Analyze Pakistan demand, competitor products and creative examples
+      - name: Analyze Pakistan demand, competitors and creative examples
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_TEXT_MODEL: gemini-2.5-flash
@@ -77,7 +65,7 @@ jobs:
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
         run: python agents/cloudinary_campaign_uploader.py
-      - name: Build approval package
+      - name: Build campaign review package
         run: |
           mkdir -p campaign_review
           cp -r source_product_images generated_images product_data market_analysis video_prompt_output campaign_copy campaign_review/
@@ -85,23 +73,23 @@ jobs:
           {
             echo "# Click & Collect — Campaign Review"
             echo
-            echo "Check original supplier photos against all AI concepts. AI concepts can change product details."
-            echo "The owner confirmed COD for this exact Pakistan Shop listing; stock and price can change."
+            echo "Review original supplier photos against AI concepts. AI concepts can change product details."
+            echo "The owner confirmed COD for the exact Pakistan Shop product; stock and price can change."
             echo
             echo "## Market analysis"
             cat market_analysis/market_analysis.md
             echo
-            echo "## Video prompt"
+            echo "## Single video prompt"
             cat video_prompt_output/image_analysis_and_video_prompt.md
             echo
-            echo "## SEO and separate captions"
+            echo "## SEO and four separate captions"
             cat campaign_copy/campaign_copy.md
             echo
-            echo "## Public AI image URLs"
+            echo "## Public image URLs and choices"
             cat campaign_media_urls.json
             echo
             echo "## Manual video step"
-            echo "Copy video_prompt_output/video_prompt.txt into your chosen video generator. Upload the finished video through the upload page and copy its public HTTPS URL for the publishing workflow."
+            echo "Copy video_prompt_output/video_prompt.txt into your chosen video generator. Upload the finished video using the upload page, then copy its public HTTPS URL into the publishing workflow."
           } > campaign_review/REVIEW.md
       - uses: actions/upload-artifact@v4
         with:
