@@ -27,21 +27,34 @@ The single prompt must preserve the exact product identity, silhouette, proporti
     body={"contents":[{"role":"user","parts":parts}],"generationConfig":{"temperature":0.2,"maxOutputTokens":3500}}
     req=urllib.request.Request(endpoint,data=json.dumps(body).encode(),headers={"Content-Type":"application/json","x-goog-api-key":API_KEY},method="POST")
     result = None
+    gemini_error = ""
     for attempt in (range(5) if API_KEY else range(0)):
         try:
-            with urllib.request.urlopen(req,timeout=180) as res: result=json.loads(res.read().decode())
+            with urllib.request.urlopen(req,timeout=90) as res:
+                result=json.loads(res.read().decode())
             break
         except urllib.error.HTTPError as exc:
             detail=exc.read().decode("utf-8","replace")
-            if exc.code not in (408,429,500,502,503,504) or attempt==4: raise RuntimeError(f"Gemini visual analysis HTTP {exc.code}: {detail[:900]}")
-            time.sleep(5*(2**attempt))
+            gemini_error=f"Gemini vision HTTP {exc.code}: {detail[:500]}"
+            if exc.code not in (408,429,500,502,503,504):
+                print(gemini_error)
+                break
+            if attempt < 4:
+                delay=min(30,5*(2**attempt))
+                print(f"{gemini_error}; retrying in {delay}s.")
+                time.sleep(delay)
+        except (TimeoutError, OSError) as exc:
+            gemini_error=f"Gemini vision network/timeout: {exc}"
+            if attempt < 4:
+                time.sleep(min(30,5*(2**attempt)))
+    if result is None:
+        print(f"{gemini_error or 'Gemini is not configured.'} Trying Groq vision fallback.")
     if result is not None:
         parts=result.get("candidates",[{}])[0].get("content",{}).get("parts",[])
         answer="\n".join(x.get("text","") for x in parts if x.get("text")).strip()
     else:
-        print("Gemini visual analysis unavailable; checking Groq for an active vision model.")
         answer = groq_chat(parts[0]["text"], max_tokens=3500, image_paths=image_paths) or ""
-    if "ONE FINAL VIDEO PROMPT" not in answer.upper() or len(answer)<250: raise RuntimeError("Gemini did not return the required single video prompt.")
+    if "ONE FINAL VIDEO PROMPT" not in answer.upper() or len(answer)<250: raise RuntimeError("Gemini and Groq did not return the required single video prompt. Groq vision requires an active image-capable model and valid API key.")
     return answer
 
 def main():
