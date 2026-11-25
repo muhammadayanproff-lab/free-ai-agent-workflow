@@ -102,13 +102,14 @@ jobs:
           retention-days: 30
       - name: Notify owner that the video prompt is ready
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: \${{ github.repository }}
-          GITHUB_RUN_ID: \${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           TITLE="Video prompt ready: campaign run $GITHUB_RUN_ID"
-          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 100 --json title --jq "map(select(.title == \\"$TITLE\\")) | length")
+          export TITLE
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 100 --json title --jq 'map(select(.title == env.TITLE)) | length')
           if [ "$EXISTING" = "0" ]; then
             {
               echo "# Your product video prompt is ready"
