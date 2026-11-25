@@ -40,6 +40,7 @@ class ListingParser(HTMLParser):
                 self.depth += 1
         elif self.current is not None and tag == "img":
             src = attrs.get("src") or attrs.get("data-src") or attrs.get("data-lazy-src") or ""
+            src = urllib.parse.urljoin(BASE, src)
             if src.startswith("https://") and src not in self.current["images"]:
                 self.current["images"].append(src)
             alt = attrs.get("alt", "")
@@ -256,7 +257,13 @@ def main():
         raise RuntimeError("GEMINI_API_KEY secret is missing.")
     products, crawl_errors = crawl_markaz_shop()
     rss_signals, rss_errors = collect_rss_signals()
-    web_memo, web_sources = grounded_web_research(products)
+    try:
+        web_memo, web_sources = grounded_web_research(products)
+    except Exception as exc:
+        web_memo, web_sources = "Google Search grounding unavailable during this run; rely only on the RSS signals below and treat evidence as limited.", []
+        rss_errors.append(f"Google Search grounding: {exc}")
+    if not rss_signals and not web_sources:
+        raise RuntimeError("No Pakistan market research signals were collected.")
     analysis = gemini_select(products, rss_signals, rss_errors + crawl_errors, web_memo, web_sources)
     by_id = {p["product_id"]: p for p in products}
     for item in analysis.get("shortlist", []):

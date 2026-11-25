@@ -15,6 +15,10 @@ on:
         description: "Optional product category from the discovery report"
         required: false
         type: string
+      product_price:
+        description: "Optional current PKR price copied from the discovery report if page extraction is unavailable"
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -31,6 +35,7 @@ jobs:
         env:
           PRODUCT_URL: ${{ inputs.product_url }}
           PRODUCT_CATEGORY: ${{ inputs.product_category }}
+          PRODUCT_PRICE: ${{ inputs.product_price }}
           MARKAZ_COD_CONFIRMED: ${{ inputs.cod_confirmed }}
         run: python agents/prepare_product.py
       - name: Analyze Pakistan demand, competitor products and creative examples
