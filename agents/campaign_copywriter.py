@@ -4,12 +4,12 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from llm_fallback import groq_chat
 
 API_KEY=os.environ.get("GEMINI_API_KEY","").strip()
 MODEL=os.getenv("GEMINI_TEXT_MODEL","gemini-3.8-flash")
 
 def main():
-    if not API_KEY: raise RuntimeError("GEMINI_API_KEY is missing.")
     product=json.loads(Path("product_data/product.json").read_text(encoding="utf-8"))
     market=Path("market_analysis/market_analysis.md").read_text(encoding="utf-8")
     visual=Path("video_prompt_output/image_analysis_and_video_prompt.md").read_text(encoding="utf-8")
@@ -37,7 +37,8 @@ Visual analysis/video prompt: {visual[:5000]}
     endpoint=f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     body={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"temperature":0.35,"responseMimeType":"application/json","maxOutputTokens":5000}}
     req=urllib.request.Request(endpoint,data=json.dumps(body).encode(),headers={"Content-Type":"application/json","x-goog-api-key":API_KEY},method="POST")
-    for attempt in range(5):
+    data = None
+    for attempt in (range(5) if API_KEY else range(0)):
         try:
             with urllib.request.urlopen(req,timeout=180) as res: data=json.loads(res.read().decode())
             break
@@ -45,9 +46,14 @@ Visual analysis/video prompt: {visual[:5000]}
             detail=exc.read().decode("utf-8","replace")
             if exc.code not in (408,429,500,502,503,504) or attempt==4: raise RuntimeError(f"Gemini copywriter HTTP {exc.code}: {detail[:900]}")
             time.sleep(5*(2**attempt))
-    text="\n".join(p.get("text","") for p in data.get("candidates",[{}])[0].get("content",{}).get("parts",[]) if p.get("text"))
-    try: result=json.loads(text)
-    except Exception as exc: raise RuntimeError(f"Gemini returned invalid copy JSON: {text[:1000]}") from exc
+    if data is not None:
+        text="\n".join(p.get("text","") for p in data.get("candidates",[{}])[0].get("content",{}).get("parts",[]) if p.get("text"))
+        try: result=json.loads(text)
+        except Exception as exc: raise RuntimeError(f"Gemini returned invalid copy JSON: {text[:1000]}") from exc
+    else:
+        print("Gemini copywriting unavailable; trying Groq JSON fallback.")
+        result = groq_chat(prompt, max_tokens=5000, json_mode=True)
+        if not isinstance(result, dict): raise RuntimeError("Gemini and Groq copywriting providers failed.")
     required=["instagram_image_caption","facebook_image_caption","instagram_video_caption","facebook_video_caption","seo_title","meta_description"]
     missing=[k for k in required if not str(result.get(k,"")).strip()]
     if missing: raise RuntimeError("Copywriter omitted required fields: "+", ".join(missing))
