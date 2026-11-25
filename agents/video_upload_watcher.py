@@ -25,10 +25,7 @@ def main():
     run_id = os.environ["CAMPAIGN_RUN_ID"].strip()
     run_started = parse_time(os.environ["CAMPAIGN_RUN_STARTED_AT"].strip())
 
-    query = urllib.parse.urlencode({
-        "prefix": "click-and-collect/manual-videos/",
-        "max_results": "100",
-    })
+    query = urllib.parse.urlencode({"max_results": "100"})
     url = f"https://api.cloudinary.com/v1_1/{cloud}/resources/video/upload?{query}"
     credentials = base64.b64encode(f"{key}:{secret}".encode()).decode()
     request = urllib.request.Request(url, headers={"Authorization": f"Basic {credentials}"})
@@ -36,9 +33,18 @@ def main():
         payload = json.loads(response.read().decode("utf-8"))
 
     resources = payload.get("resources", [])
+    def is_campaign_upload(item):
+        tags = {str(tag).lower() for tag in item.get("tags", [])}
+        folder = str(item.get("asset_folder") or item.get("folder") or "").strip("/")
+        public_id = str(item.get("public_id", ""))
+        tagged = "click_collect_campaign_video" in tags
+        in_folder = folder == "click-and-collect/manual-videos" or public_id.startswith("click-and-collect/manual-videos/")
+        return tagged or in_folder
+
     eligible = [
         item for item in resources
-        if item.get("secure_url", "").startswith("https://")
+        if is_campaign_upload(item)
+        and item.get("secure_url", "").startswith("https://")
         and item.get("created_at")
         and parse_time(item["created_at"]) >= run_started
     ]
@@ -64,6 +70,7 @@ def main():
     details = {
         "video_url": video_url,
         "public_id": video.get("public_id", ""),
+        "asset_folder": video.get("asset_folder") or video.get("folder", ""),
         "created_at": video.get("created_at", ""),
         "format": video.get("format", ""),
         "bytes": video.get("bytes", 0),
