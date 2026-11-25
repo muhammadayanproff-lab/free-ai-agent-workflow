@@ -93,6 +93,9 @@ class RepositoryIntegrityTests(unittest.TestCase):
         self.assertIn('gemini-3.5-flash-lite', source)
         self.assertIn('switching immediately', source)
         self.assertIn('timeout=90', source)
+        self.assertIn('def preflight_gemini_model()', source)
+        self.assertIn('preflight_gemini_model()\n    products, crawl_errors = crawl_markaz_shop()', source)
+        self.assertIn('timeout=25', source)
         self.assertNotIn('range(8)', source)
 
     def test_manual_video_upload_page_present(self):
