@@ -5,6 +5,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from llm_fallback import groq_chat
 
 API_KEY=os.environ.get("GEMINI_API_KEY","").strip()
 CF_ACCOUNT=os.environ.get("CLOUDFLARE_ACCOUNT_ID","").strip()
@@ -27,7 +28,8 @@ Market analysis: {analysis[:7000]}
 """
     body={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"temperature":0.55,"responseMimeType":"application/json","maxOutputTokens":2500}}
     req=urllib.request.Request(endpoint,data=json.dumps(body).encode(),headers={"Content-Type":"application/json","x-goog-api-key":API_KEY},method="POST")
-    for attempt in range(5):
+    data = None
+    for attempt in (range(5) if API_KEY else range(0)):
         try:
             with urllib.request.urlopen(req,timeout=180) as res: data=json.loads(res.read().decode())
             break
@@ -35,9 +37,14 @@ Market analysis: {analysis[:7000]}
             detail=exc.read().decode("utf-8","replace")
             if exc.code not in (408,429,500,502,503,504) or attempt==4: raise RuntimeError(f"Gemini prompt generation HTTP {exc.code}: {detail[:800]}")
             time.sleep(5*(2**attempt))
-    text="\n".join(p.get("text","") for p in data.get("candidates",[{}])[0].get("content",{}).get("parts",[]) if p.get("text"))
-    try: prompts=json.loads(text).get("prompts",[])
-    except Exception as exc: raise RuntimeError(f"Invalid image prompt JSON: {text[:700]}") from exc
+    if data is not None:
+        text="\n".join(p.get("text","") for p in data.get("candidates",[{}])[0].get("content",{}).get("parts",[]) if p.get("text"))
+        try: prompts=json.loads(text).get("prompts",[])
+        except Exception as exc: raise RuntimeError(f"Invalid image prompt JSON: {text[:700]}") from exc
+    else:
+        print("Gemini image-prompt generation unavailable; trying Groq JSON fallback.")
+        fallback = groq_chat(prompt, max_tokens=2500, json_mode=True)
+        prompts = fallback.get("prompts", []) if isinstance(fallback, dict) else []
     if len(prompts)!=3 or not all(isinstance(x,str) and len(x)>30 for x in prompts): raise RuntimeError("Gemini did not return exactly three usable image prompts.")
     return prompts
 
@@ -53,7 +60,7 @@ def generate(prompt, path):
     path.write_bytes(base64.b64decode(image))
 
 def main():
-    if not API_KEY: raise RuntimeError("GEMINI_API_KEY is missing.")
+    if not API_KEY and not os.environ.get("GROQ_API_KEY","").strip(): raise RuntimeError("Neither GEMINI_API_KEY nor GROQ_API_KEY is configured.")
     if not CF_ACCOUNT or not CF_TOKEN: raise RuntimeError("CLOUDFLARE_ACCOUNT_ID/API_TOKEN secret is missing.")
     product=json.loads(Path("product_data/product.json").read_text(encoding="utf-8"))
     analysis=Path("market_analysis/market_analysis.md").read_text(encoding="utf-8")
