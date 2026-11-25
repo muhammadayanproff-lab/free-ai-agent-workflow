@@ -2,7 +2,7 @@ import base64,json,mimetypes,os,time,urllib.error,urllib.request
 from pathlib import Path
 
 API_KEY=os.environ.get("GEMINI_API_KEY","").strip()
-MODEL=os.getenv("GEMINI_VISION_MODEL","gemini-2.5-flash")
+MODEL=os.getenv("GEMINI_VISION_MODEL","gemini-3.8-flash")
 IMAGES_DIR=Path(os.getenv("PRODUCT_IMAGES_DIR","source_product_images"))
 
 def call_gemini(image_paths,details):
