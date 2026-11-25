@@ -86,7 +86,10 @@ Do not give exact sales forecasts without actual store/ad data. Google Trends/ne
             if exc.code not in (408, 429, 500, 502, 503, 504) or attempt == 4:
                 errors.append(f"Gemini grounded search: HTTP {exc.code}: {detail[:700]}")
                 break
-            time.sleep(5 * (2 ** attempt))
+            time.sleep(min(30, 5 * (2 ** attempt)))
+        except (TimeoutError, OSError) as exc:
+            errors.append(f"Gemini grounded search network/timeout: {exc}")
+            break
     report = ""
     grounded_sources = []
     if result:
