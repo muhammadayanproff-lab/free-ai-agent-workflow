@@ -1,0 +1,96 @@
+name: Prepare Product Campaign Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      product_sku:
+        description: "Exact SKU from the latest Pakistan Product Discovery report"
+        required: true
+        type: string
+      cod_confirmed:
+        description: "Confirm you checked COD on this exact product in Markaz Pakistan Shop"
+        required: true
+        type: choice
+        options: ["NO", "YES"]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    if: inputs.cod_confirmed == 'YES'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify selected Markaz Pakistan product and download original photos
+        env:
+          PRODUCT_SKU: ${{ inputs.product_sku }}
+          MARKAZ_COD_CONFIRMED: ${{ inputs.cod_confirmed }}
+          MARKAZ_CATALOG: catalog/markaz_pakistan_export.csv
+        run: python agents/prepare_product.py
+      - name: Analyze Pakistan demand, competitors and risks
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_TEXT_MODEL: gemini-2.5-flash
+        run: python agents/market_analysis.py
+      - name: Generate three AI campaign image concepts
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_TEXT_MODEL: gemini-2.5-flash
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: python agents/image_campaign_creator.py
+      - name: Analyze original product photos and create one video prompt
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_VISION_MODEL: gemini-2.5-flash
+          PRODUCT_IMAGES_DIR: source_product_images
+          PRODUCT_DETAILS: ${{ inputs.product_sku }}
+        run: python agents/video_prompt_agent.py
+      - name: Write SEO package and four separate captions
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_TEXT_MODEL: gemini-2.5-flash
+        run: python agents/campaign_copywriter.py
+      - name: Upload AI image concepts to Cloudinary
+        env:
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: python agents/cloudinary_campaign_uploader.py
+      - name: Build approval package
+        run: |
+          mkdir -p campaign_review
+          cp -r source_product_images generated_images product_data market_analysis video_prompt_output campaign_copy campaign_review/
+          cp campaign_media_urls.json campaign_review/
+          {
+            echo "# Click & Collect — Campaign Review"
+            echo
+            echo "Check original supplier photos against all AI concepts. AI concepts can change product details."
+            echo "The owner has confirmed COD for the selected SKU, but stock and price can change."
+            echo
+            echo "## Market analysis"
+            cat market_analysis/market_analysis.md
+            echo
+            echo "## Video prompt"
+            cat video_prompt_output/image_analysis_and_video_prompt.md
+            echo
+            echo "## SEO and separate captions"
+            cat campaign_copy/campaign_copy.md
+            echo
+            echo "## Public AI image URLs"
+            cat campaign_media_urls.json
+            echo
+            echo "## Manual video step"
+            echo "Copy video_prompt_output/video_prompt.txt into your chosen video generator. Upload the finished video to Cloudinary and copy its public HTTPS URL for the publishing workflow."
+          } > campaign_review/REVIEW.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: click-collect-campaign-review
+          path: campaign_review/
+          if-no-files-found: error
+          retention-days: 30
