@@ -57,6 +57,33 @@ class RepositoryIntegrityTests(unittest.TestCase):
         page = (ROOT / "docs" / "upload-video.html").read_text(encoding="utf-8")
         self.assertIn("click_collect_manual_video", page)
 
+
+    def test_alternate_day_2pm_pakistan_schedule_and_auto_handoff(self):
+        discovery = (ROOT / ".github" / "workflows" / "product_discovery.yml").read_text(encoding="utf-8")
+        campaign = (ROOT / ".github" / "workflows" / "campaign_assets.yml").read_text(encoding="utf-8")
+        self.assertIn('cron: "0 9 * * *"', discovery)
+        self.assertIn('ZoneInfo("Asia/Karachi")', discovery)
+        self.assertIn("days % 2 == 0", discovery)
+        self.assertIn('workflows: ["Pakistan Product Discovery"]', campaign)
+        self.assertIn("workflow_run:", campaign)
+        self.assertNotIn("cod_confirmed:", campaign)
+
+    def test_video_upload_auto_approval_and_owner_gate(self):
+        watcher = (ROOT / ".github" / "workflows" / "video_upload_watcher.yml").read_text(encoding="utf-8")
+        publisher = (ROOT / ".github" / "workflows" / "meta_publisher.yml").read_text(encoding="utf-8")
+        self.assertIn('cron: "*/5 * * * *"', watcher)
+        self.assertIn("agents/video_upload_watcher.py", watcher)
+        self.assertIn("issue_comment:", publisher)
+        self.assertIn("github.event.comment.body == 'APPROVE'", publisher)
+        self.assertIn("github.event.comment.user.login == github.repository_owner", publisher)
+        self.assertTrue((ROOT / "agents" / "video_upload_watcher.py").is_file())
+
+    def test_checkout_claims_are_not_assumed(self):
+        prepare = (ROOT / "agents" / "prepare_product.py").read_text(encoding="utf-8")
+        copywriter = (ROOT / "agents" / "campaign_copywriter.py").read_text(encoding="utf-8")
+        self.assertIn('"cod_confirmed_by_owner": False', prepare)
+        self.assertIn("never promise COD", copywriter)
+
     def test_manual_video_upload_page_present(self):
         self.assertTrue((ROOT / "docs" / "upload-video.html").is_file())
 
