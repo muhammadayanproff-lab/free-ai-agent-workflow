@@ -33,6 +33,8 @@ class RepositoryIntegrityTests(unittest.TestCase):
     def test_video_generation_removed_prompt_agent_present(self):
         self.assertTrue((ROOT / "agents" / "video_prompt_agent.py").is_file())
         self.assertFalse((ROOT / "agents" / "video_creator.py").exists())
+        self.assertFalse((ROOT / ".github" / "workflows" / "video_creator.yml").exists())
+        self.assertFalse((ROOT / ".github" / "workflows" / "daily_campaign.yml").exists())
 
     def test_manual_video_upload_page_present(self):
         self.assertTrue((ROOT / "docs" / "upload-video.html").is_file())
