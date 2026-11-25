@@ -61,7 +61,45 @@ Market analysis: {analysis[:7000]}
     if len(prompts) != 3:
         fallback = groq_chat(prompt, max_tokens=2500, json_mode=True)
         prompts = fallback.get("prompts", []) if isinstance(fallback, dict) else []
-    if len(prompts)!=3 or not all(isinstance(x,str) and len(x)>30 for x in prompts): raise RuntimeError("Gemini and Groq did not return exactly three usable image prompts. Check GROQ_API_KEY access and provider quotas.")
+    if len(prompts) != 3 or not all(isinstance(x, str) and len(x) > 30 for x in prompts):
+        # Last-resort local prompt templates keep the campaign moving when both
+        # hosted text providers are unavailable. They use only the product name
+        # and explicitly instruct the image model not to invent product details.
+        product_name = str(
+            product.get("product_name")
+            or product.get("name")
+            or product.get("title")
+            or "the supplied product"
+        ).strip()
+        product_name = " ".join(product_name.split())[:180] or "the supplied product"
+        print(
+            "Gemini/Groq prompt generation unavailable; using three conservative "
+            "local creative templates. No product features will be added."
+        )
+        subject = f'the exact product shown in the supplied reference: "{product_name}"'
+        prompts = [
+            (
+                f"Create a premium, photorealistic ecommerce hero photograph featuring only {subject}. "
+                "Preserve the reference product's exact shape, colors, proportions, parts, and appearance. "
+                "Place it centered on a clean softly lit neutral studio surface with tasteful shadows and "
+                "a simple uncluttered background. Do not add accessories, packaging, logos, labels, text, "
+                "badges, extra products, or any feature not visible in the reference."
+            ),
+            (
+                f"Create a natural Pakistani home lifestyle ecommerce photograph featuring {subject} "
+                "in a believable everyday setting. Keep the product itself identical to the reference "
+                "image; show a clear, realistic context without implying unverified performance or benefits. "
+                "Use warm natural daylight, a tidy environment, and restrained composition. Do not add "
+                "accessories, packaging, logos, labels, text, badges, extra products, or invented details."
+            ),
+            (
+                f"Create a close-up commercial product photograph of {subject}, using the supplied image "
+                "as the strict visual reference. Emphasize only details that are actually visible on the "
+                "real product, with crisp focus, realistic materials, soft directional lighting, and a "
+                "simple background. Do not invent components, materials, features, accessories, logos, "
+                "packaging, readable text, badges, or extra products."
+            ),
+        ]
     return prompts
 
 def generate(prompt, path):
