@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-3.8-flash")
 BASE = "https://www.markaz.app"
 OUT = Path("product_discovery_output")
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ClickCollectPakistanResearch/2.0)"}
