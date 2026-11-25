@@ -60,13 +60,17 @@ Visual analysis/video prompt: {visual[:5000]}
                 time.sleep(min(30,5*(2**attempt)))
     if data is None:
         print(f"{gemini_error or 'Gemini is not configured.'} Trying Groq fallback.")
+    result = None
     if data is not None:
         text="\n".join(p.get("text","") for p in data.get("candidates",[{}])[0].get("content",{}).get("parts",[]) if p.get("text"))
-        try: result=json.loads(text)
-        except Exception as exc: raise RuntimeError(f"Gemini returned invalid copy JSON: {text[:1000]}") from exc
-    else:
+        try:
+            result=json.loads(text)
+        except Exception as exc:
+            print(f"Gemini returned invalid copy JSON ({exc}); trying Groq.")
+    if not isinstance(result, dict):
         result = groq_chat(prompt, max_tokens=5000, json_mode=True)
-        if not isinstance(result, dict): raise RuntimeError("Gemini and Groq copywriting providers failed. Check Groq API key access and provider quotas.")
+    if not isinstance(result, dict):
+        raise RuntimeError("Gemini and Groq copywriting providers failed. Check GROQ_API_KEY access and provider quotas.")
     required=["instagram_image_caption","facebook_image_caption","instagram_video_caption","facebook_video_caption","seo_title","meta_description"]
     missing=[k for k in required if not str(result.get(k,"")).strip()]
     if missing: raise RuntimeError("Copywriter omitted required fields: "+", ".join(missing))
