@@ -36,8 +36,7 @@ def groq_chat(prompt, max_tokens=5000, json_mode=False, image_paths=None):
     try:
         available = _models(headers)
     except Exception as exc:
-        print(f"Groq model catalogue unavailable: {exc}")
-        return None
+        print(f"Groq model catalogue unavailable ({exc}); trying known compatible model IDs directly.")
 
     if vision_paths:
         candidates = [
@@ -45,6 +44,8 @@ def groq_chat(prompt, max_tokens=5000, json_mode=False, image_paths=None):
             if ("scout" in name.lower() or "vision" in name.lower())
             and ("llama-4" in name.lower() or "llama4" in name.lower())
         ][:3]
+        if not candidates and not available:
+            candidates = ["meta-llama/llama-4-scout-17b-16e-instruct"]
         if not candidates:
             print("Groq fallback has no active image-capable Llama vision model for this account.")
             return None
