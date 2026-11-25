@@ -6,7 +6,7 @@ import urllib.request
 from pathlib import Path
 
 API_KEY=os.environ.get("GEMINI_API_KEY","").strip()
-MODEL=os.getenv("GEMINI_TEXT_MODEL","gemini-2.5-flash")
+MODEL=os.getenv("GEMINI_TEXT_MODEL","gemini-3.8-flash")
 
 def main():
     if not API_KEY: raise RuntimeError("GEMINI_API_KEY is missing.")
