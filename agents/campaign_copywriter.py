@@ -23,7 +23,7 @@ Create four separate, platform-native captions:
 
 Also create concise SEO title, meta description, primary keyword, 8-12 secondary keywords, product alt text, and 8-12 relevant hashtags for each caption where suitable.
 Write in natural Pakistani English with optional simple Roman Urdu phrases only where useful.
-Use only product facts from the supplied Markaz listing. Do not invent product performance, material, warranty, stock, delivery dates, discount or review claims.
+Use only product facts from the supplied Markaz listing. Do not invent product performance, material, warranty, stock, delivery dates, discount, review or Cash on Delivery (COD) claims. COD and checkout availability are not verified from the public listing, so never promise COD, delivery terms or payment methods.
 Don't include an exact selling price unless the supplied verified data explicitly includes the final Click & Collect price. The Markaz supplier price is not automatically the store's customer price.
 Keep each platform caption distinct. Image caption and video caption must not be duplicates. Include an appropriate CTA without inventing a product page URL.
 Return STRICT JSON with keys:
