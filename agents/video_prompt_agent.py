@@ -59,7 +59,28 @@ The single prompt must preserve the exact product identity, silhouette, proporti
         print("Gemini response did not meet the required format; retrying with Groq vision.")
         answer = groq_chat(parts[0]["text"], max_tokens=3500, image_paths=image_paths) or ""
     if "ONE FINAL VIDEO PROMPT" not in answer.upper() or len(answer)<250:
-        raise RuntimeError("Gemini and Groq did not return the required single video prompt. Groq vision requires an active image-capable model and valid API key.")
+        print(
+            "Gemini/Groq vision unavailable; using a conservative reference-faithful "
+            "video prompt template. The editor must visually verify every product detail."
+        )
+        product_name = str(
+            details.get("product_name")
+            or details.get("name")
+            or details.get("title")
+            or "the supplied product"
+        ).strip()
+        product_name = " ".join(product_name.split())[:180] or "the supplied product"
+        answer = f"""IMAGE ANALYSIS:
+Automated image analysis was unavailable because both hosted AI providers could not be reached. Treat the original supplier photos as the only source of truth. Before publishing, a human must verify the product's exact visible shape, colors, proportions, parts, included items and any uncertain details. Do not infer materials, functions, specifications or benefits from the listing title alone.
+
+ONE FINAL VIDEO PROMPT:
+Create a 10–15 second vertical 9:16 photorealistic ecommerce product video for "{product_name}". Use the supplied original supplier photos as strict visual references and preserve the exact real product identity, silhouette, proportions, colors, components and visible details in every frame. Do not redesign, morph, duplicate, embellish or add any part that is not clearly present in the references.
+
+Beat 1 (0–4 seconds): clean opening hero shot of the exact product, centered against a simple bright neutral background; gentle camera push-in.
+Beat 2 (4–10 seconds): slow controlled camera orbit and close-up cuts showing only details that are clearly visible in the original photos. Do not simulate a function or use-case unless it is unambiguously demonstrated by the reference images.
+Beat 3 (10–15 seconds): return to a stable full-product hero shot with soft natural studio lighting and subtle realistic shadows.
+
+Use smooth restrained camera movement, realistic scale, consistent product geometry and professional commercial lighting. Keep the background uncluttered. No text, subtitles, prices, badges, watermark, invented logo, extra accessories, packaging, people, unsupported claims or additional products. The product must remain visually identical to the supplied reference photos throughout."""
     return answer
 
 def main():
