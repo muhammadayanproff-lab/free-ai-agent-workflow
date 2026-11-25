@@ -15,14 +15,14 @@ button:disabled{opacity:.5;cursor:wait}.muted{font-size:12px;color:#94a6bd}.stat
 </style></head>
 <body><main>
 <h1>Upload your finished product video</h1>
-<p>Select the video you generated using the AI prompt. This page uploads it directly to your Cloudinary account. It does not publish anything to Instagram or Facebook.</p>
+<p>Select the video you generated using the AI prompt. This page uploads it directly to Cloudinary. After upload, the automation detects the video and prepares your final approval request; nothing is published until you approve.</p>
 <div class="field"><label for="cloud">Cloudinary cloud name</label><input id="cloud" value="fzhm9huq" autocomplete="off"></div>
 <div class="field"><label for="preset">Cloudinary unsigned upload preset</label><input id="preset" value="click_collect_manual_video" readonly></div>
 <div class="field"><label for="file">Video file (MP4, MOV or WEBM; max 100 MB)</label><input id="file" type="file" accept="video/mp4,video/quicktime,video/webm"></div>
 <button id="upload">Upload video</button>
 <div id="status" class="status" role="status"></div>
-<div id="result" class="url"><label for="videoUrl">Public video URL — copy this into the GitHub publishing workflow</label><input id="videoUrl" readonly><button id="copy">Copy video URL</button></div>
-<p class="muted">Security: this page uses an unsigned Cloudinary preset, never your Cloudinary API secret. Run the GitHub Actions workflow “Configure Cloudinary Video Upload” once to create the restricted unsigned preset. It allows MP4/MOV/WEBM and stores uploads in click-and-collect/manual-videos. This page checks 100 MB in your browser; Cloudinary presets do not enforce a per-preset file-size cap.</p>
+<div id="result" class="url"><label for="videoUrl">Uploaded video URL — automation will detect this automatically</label><input id="videoUrl" readonly><button id="copy">Copy video URL</button></div>
+<p class="muted">Security: this page uses a restricted unsigned Cloudinary preset and never exposes your Cloudinary API secret. The automation checks the upload folder every five minutes and opens a private-to-the-repository approval issue. This page checks 100 MB in your browser; Cloudinary presets do not enforce a per-preset file-size cap.</p>
 </main>
 <script>
 const $=id=>document.getElementById(id);
@@ -38,7 +38,7 @@ $("upload").addEventListener("click",async()=>{
   const response=await fetch("https://api.cloudinary.com/v1_1/"+encodeURIComponent(cloud)+"/video/upload",{method:"POST",body:form});
   const data=await response.json();
   if(!response.ok||!data.secure_url)throw new Error(data.error?.message||"Cloudinary upload failed.");
-  $("videoUrl").value=data.secure_url;$("result").style.display="block";$("status").textContent="Upload successful. Your video is stored in Cloudinary; it has not been published.";
+  $("videoUrl").value=data.secure_url;$("result").style.display="block";$("status").textContent="Upload successful. The automation will detect your video within about five minutes and create your final approval request. No GitHub workflow run or URL copy is needed.";
  }catch(error){$("status").textContent="Upload failed: "+error.message}
  finally{button.disabled=false}
 });
