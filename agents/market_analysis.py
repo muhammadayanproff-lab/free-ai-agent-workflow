@@ -7,6 +7,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from llm_fallback import groq_chat
 
 API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-3.8-flash")
@@ -23,8 +24,6 @@ def rss(url, source, limit=18):
     } for item in root.findall(".//item")[:limit]]
 
 def main():
-    if not API_KEY:
-        raise RuntimeError("GEMINI_API_KEY is missing.")
     product = json.loads(Path("product_data/product.json").read_text(encoding="utf-8"))
     query = urllib.parse.quote(f'"{product["title"]}" Pakistan')
     rss_sources, errors = [], []
@@ -77,7 +76,7 @@ Do not give exact sales forecasts without actual store/ad data. Google Trends/ne
     request = urllib.request.Request(endpoint, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY}, method="POST")
     result = None
-    for attempt in range(5):
+    for attempt in (range(5) if API_KEY else range(0)):
         try:
             with urllib.request.urlopen(request, timeout=180) as response:
                 result = json.loads(response.read().decode())
@@ -99,6 +98,10 @@ Do not give exact sales forecasts without actual store/ad data. Google Trends/ne
             web = chunk.get("web", {})
             if web.get("uri"):
                 grounded_sources.append({"title": web.get("title", ""), "url": web["uri"]})
+    if not report and rss_sources:
+        print("Gemini grounded market analysis unavailable; trying Groq with collected RSS evidence only.")
+        groq_prompt = prompt + "\n\nIMPORTANT: Google Search grounding was unavailable. Use only the supplied RSS evidence, clearly label gaps, and do not invent sources."
+        report = groq_chat(groq_prompt, max_tokens=6500) or ""
     if not report:
         if not rss_sources:
             raise RuntimeError("Neither Google Search grounding nor Pakistan RSS sources returned research.")
