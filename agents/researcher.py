@@ -258,7 +258,8 @@ RSS COLLECTION ERRORS:
     errors = []
     # Switch away from an overloaded primary quickly instead of waiting 17 minutes.
     fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
-    model_candidates = [MODEL] if MODEL == fallback_model else [MODEL, fallback_model]
+    tertiary_model = os.getenv("GEMINI_TERTIARY_MODEL", "gemini-3.1-flash-lite")
+    model_candidates = list(dict.fromkeys([MODEL, fallback_model, tertiary_model]))
     for model_index, model_name in enumerate(model_candidates):
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         for attempt in range(2):
@@ -278,7 +279,7 @@ RSS COLLECTION ERRORS:
                 if error.code not in (408, 429, 500, 502, 503, 504):
                     raise RuntimeError(f"Gemini product selection failed ({error.code}): {detail[:1000]}") from error
                 if model_index < len(model_candidates) - 1:
-                    print(f"Gemini {model_name} returned HTTP {error.code}; switching immediately to {fallback_model}.")
+                    print(f"Gemini {model_name} returned HTTP {error.code}; switching to next fallback model.")
                     break
                 if attempt == 0:
                     print(f"Fallback model {model_name} returned HTTP {error.code}; retrying once in 10 seconds.")
@@ -286,7 +287,7 @@ RSS COLLECTION ERRORS:
             except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
                 errors.append(f"{model_name} network/timeout error: {error}")
                 if model_index < len(model_candidates) - 1:
-                    print(f"Gemini {model_name} timed out; switching immediately to {fallback_model}.")
+                    print(f"Gemini {model_name} timed out; switching to next fallback model.")
                     break
                 if attempt == 0:
                     time.sleep(10)
@@ -308,7 +309,8 @@ def preflight_gemini_model():
     """Check Gemini availability before spending time crawling the catalogue."""
     global MODEL
     fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
-    candidates = [MODEL] if MODEL == fallback_model else [MODEL, fallback_model]
+    tertiary_model = os.getenv("GEMINI_TERTIARY_MODEL", "gemini-3.1-flash-lite")
+    candidates = list(dict.fromkeys([MODEL, fallback_model, tertiary_model]))
     errors = []
     for model_name in candidates:
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
