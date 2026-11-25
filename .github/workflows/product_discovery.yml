@@ -17,7 +17,7 @@ jobs:
       - name: Research Pakistani market and crawl public Markaz Pakistan Shop products
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_TEXT_MODEL: gemini-2.5-flash
+          GEMINI_TEXT_MODEL: gemini-3.8-flash
           MARKAZ_MAX_PAGES_PER_CATEGORY: "2"
         run: python agents/researcher.py
       - name: Save product shortlist, source links and selected product
