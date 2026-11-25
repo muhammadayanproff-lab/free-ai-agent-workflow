@@ -12,7 +12,7 @@ The repository now centers on Pakistani product discovery, public Markaz Pakista
 6. **Image Analysis & Video Prompt Agent** analyzes original product photos and creates exactly one copy-ready 10–15 second, 9:16 video prompt.
 7. **Manual video upload**: use the upload page at `/upload-video.html` after it is deployed. Upload your externally generated video to Cloudinary and copy its public HTTPS URL.
 8. **SEO & Caption Agent** creates four separate captions: Instagram image, Facebook image, Instagram Reel and Facebook video.
-9. **Approval & Publishing**: choose APPROVE only after reviewing everything. The publishing workflow automatically downloads the latest campaign captions and image URLs; you only select which generated image, paste the uploaded video URL, select platforms and choose APPROVE.
+9. **Approval & Publishing**: choose APPROVE only after reviewing everything. The publishing workflow automatically downloads the latest campaign captions and image URLs; you select an AI concept or the original supplier photo, paste the uploaded video URL, select platforms and choose APPROVE.
 
 ## Required GitHub Actions secrets
 

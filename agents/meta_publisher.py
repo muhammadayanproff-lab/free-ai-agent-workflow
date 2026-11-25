@@ -90,10 +90,12 @@ def main():
         raise RuntimeError("Latest campaign artifact is missing campaign_copy.json or campaign_media_urls.json.")
     copy = json.loads(copy_path.read_text(encoding="utf-8"))
     media = json.loads(media_path.read_text(encoding="utf-8"))
-    choice = int(os.getenv("IMAGE_CHOICE", "1"))
-    if choice < 1 or choice > len(media):
-        raise RuntimeError(f"IMAGE_CHOICE must be between 1 and {len(media)}.")
-    image_url = media[choice - 1].get("url", "")
+    choice = os.getenv("IMAGE_CHOICE", "concept_1").strip()
+    selected_image = next((item for item in media if item.get("choice") == choice), None)
+    if not selected_image:
+        available = ", ".join(item.get("choice", "") for item in media)
+        raise RuntimeError(f"IMAGE_CHOICE '{choice}' is unavailable. Available: {available}")
+    image_url = selected_image.get("url", "")
     video_url = required("VIDEO_URL")
     captions = {
         ("instagram", "image"): copy.get("instagram_image_caption", ""),
@@ -123,7 +125,7 @@ def main():
     receipt = {
         "status": "PUBLISHED",
         "platform_results": outcomes,
-        "image_choice": choice,
+        "image_choice": choice,\n        "image_type": selected_image.get("type", ""),
         "image_url": image_url,
         "video_url": video_url,
         "captions_loaded_from_campaign_artifact": True,

@@ -14,11 +14,11 @@ on:
         type: choice
         options: ["Instagram,Facebook", "Instagram", "Facebook"]
       image_choice:
-        description: "Which of the three generated images to publish"
+        description: "Choose an AI concept or the original Markaz supplier photo"
         required: true
-        default: "1"
+        default: "concept_1"
         type: choice
-        options: ["1", "2", "3"]
+        options: ["concept_1", "concept_2", "concept_3", "original_1"]
       video_url:
         description: "Public HTTPS video URL copied from the Cloudinary upload page"
         required: true
@@ -36,7 +36,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Download latest approved campaign assets and captions
+      - name: Download latest successful campaign assets and captions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
