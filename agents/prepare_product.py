@@ -6,8 +6,6 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
-COD_CONFIRMED = os.getenv("MARKAZ_COD_CONFIRMED", "").strip().upper() == "YES"
-
 class DetailParser(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -58,8 +56,6 @@ def find_products(value):
     return found
 
 def main():
-    if not COD_CONFIRMED:
-        raise RuntimeError("Confirm COD on the exact selected product in Markaz Pakistan Shop before campaign preparation.")
     selected_path = Path("product_discovery_output/selected_product.json")
     if not selected_path.is_file():
         raise RuntimeError("Latest successful Product Discovery artifact has no selected product. Run Product Discovery and review its report first.")
@@ -175,8 +171,8 @@ def main():
         "image_urls": unique_images[:8],
         "local_image_files": saved,
         "catalog_source": "Public Markaz Pakistan Shop listing and product page",
-        "cod_confirmed_by_owner": True,
-        "cod_verification_note": "Owner confirmed COD on this exact Pakistan product checkout. This is not a live private API verification.",
+        "cod_confirmed_by_owner": False,
+        "cod_verification_note": "COD was not verified because checkout is not accessible through the public listing. Confirm current COD availability and final price before approving publication.",
     }
     Path("product_data").mkdir(exist_ok=True)
     Path("product_data/product.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
