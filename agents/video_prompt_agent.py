@@ -1,5 +1,6 @@
 import base64,json,mimetypes,os,time,urllib.error,urllib.request
 from pathlib import Path
+from llm_fallback import groq_chat
 
 API_KEY=os.environ.get("GEMINI_API_KEY","").strip()
 MODEL=os.getenv("GEMINI_VISION_MODEL","gemini-3.8-flash")
@@ -25,7 +26,8 @@ The single prompt must preserve the exact product identity, silhouette, proporti
     endpoint=f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     body={"contents":[{"role":"user","parts":parts}],"generationConfig":{"temperature":0.2,"maxOutputTokens":3500}}
     req=urllib.request.Request(endpoint,data=json.dumps(body).encode(),headers={"Content-Type":"application/json","x-goog-api-key":API_KEY},method="POST")
-    for attempt in range(5):
+    result = None
+    for attempt in (range(5) if API_KEY else range(0)):
         try:
             with urllib.request.urlopen(req,timeout=180) as res: result=json.loads(res.read().decode())
             break
@@ -33,13 +35,17 @@ The single prompt must preserve the exact product identity, silhouette, proporti
             detail=exc.read().decode("utf-8","replace")
             if exc.code not in (408,429,500,502,503,504) or attempt==4: raise RuntimeError(f"Gemini visual analysis HTTP {exc.code}: {detail[:900]}")
             time.sleep(5*(2**attempt))
-    parts=result.get("candidates",[{}])[0].get("content",{}).get("parts",[])
-    answer="\n".join(x.get("text","") for x in parts if x.get("text")).strip()
+    if result is not None:
+        parts=result.get("candidates",[{}])[0].get("content",{}).get("parts",[])
+        answer="\n".join(x.get("text","") for x in parts if x.get("text")).strip()
+    else:
+        print("Gemini visual analysis unavailable; checking Groq for an active vision model.")
+        answer = groq_chat(parts[0]["text"], max_tokens=3500, image_paths=image_paths) or ""
     if "ONE FINAL VIDEO PROMPT" not in answer.upper() or len(answer)<250: raise RuntimeError("Gemini did not return the required single video prompt.")
     return answer
 
 def main():
-    if not API_KEY: raise RuntimeError("GEMINI_API_KEY is missing.")
+    if not API_KEY and not os.environ.get("GROQ_API_KEY","").strip(): raise RuntimeError("Neither GEMINI_API_KEY nor GROQ_API_KEY is configured.")
     product_file=Path("product_data/product.json")
     if not product_file.exists(): raise RuntimeError("Run product preparation first; product_data/product.json is missing.")
     details=json.loads(product_file.read_text(encoding="utf-8"))
