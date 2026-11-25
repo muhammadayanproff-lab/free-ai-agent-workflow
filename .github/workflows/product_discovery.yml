@@ -1,29 +1,26 @@
 name: Pakistan Product Discovery
-
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 3 * * 1,4"
-
 permissions:
   contents: read
-
 jobs:
   discover:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Research Pakistan market and match Markaz Pakistan catalogue
+      - name: Research Pakistani market and crawl public Markaz Pakistan Shop products
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_TEXT_MODEL: gemini-2.5-flash
-          MARKAZ_CATALOG: catalog/markaz_pakistan_export.csv
+          MARKAZ_MAX_PAGES_PER_CATEGORY: "2"
         run: python agents/researcher.py
-      - name: Save discovery report and selected product
+      - name: Save product shortlist, source links and selected product
         uses: actions/upload-artifact@v4
         with:
           name: pakistan-product-discovery

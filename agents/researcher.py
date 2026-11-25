@@ -1,4 +1,3 @@
-import csv
 import json
 import os
 import re
@@ -8,253 +7,304 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 
 API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-flash")
-CATALOG = Path(os.getenv("MARKAZ_CATALOG", "catalog/markaz_pakistan_export.csv"))
+BASE = "https://www.markaz.app"
 OUT = Path("product_discovery_output")
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ClickCollectProductResearch/2.0)"}
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ClickCollectPakistanResearch/2.0)"}
+CATEGORIES = [
+    "Kitchenware", "Electronics", "Personal Care Appliances",
+    "Storage & Cleaning", "Sports & Outdoor", "Car & Bike Accessories",
+    "Office & Stationery", "Toys", "Kids Clothing", "Home & Living",
+]
+MAX_PAGES = int(os.getenv("MARKAZ_MAX_PAGES_PER_CATEGORY", "2"))
+MAX_PRODUCTS_PER_PAGE = 18
 
-ALIASES = {
-    "title": ["title", "name", "product name", "product title"],
-    "sku": ["variant sku", "sku", "product sku", "id"],
-    "price": ["variant price", "price", "selling price", "markaz price", "regular price"],
-    "description": ["body (html)", "description", "product description", "short description"],
-    "image": ["image src", "image url", "image", "images", "featured image"],
-    "url": ["product url", "url", "link", "handle"],
-    "source": ["source", "market", "catalog", "origin"],
-    "payment": ["payment", "payment method", "cod", "delivery note"],
-    "category": ["type", "category", "product type"],
-}
+class ListingParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.current = None
+        self.depth = 0
+        self.items = []
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        href = attrs.get("href", "")
+        if tag == "a" and href.startswith("/shop/product/") and "/china/" not in href:
+            if self.current is None:
+                self.current = {"url": urllib.parse.urljoin(BASE, href), "text": "", "images": []}
+                self.depth = 1
+            else:
+                self.depth += 1
+        elif self.current is not None and tag == "img":
+            src = attrs.get("src") or attrs.get("data-src") or attrs.get("data-lazy-src") or ""
+            if src.startswith("https://") and src not in self.current["images"]:
+                self.current["images"].append(src)
+            alt = attrs.get("alt", "")
+            if alt:
+                self.current["text"] += " " + alt
+    def handle_data(self, data):
+        if self.current is not None:
+            self.current["text"] += " " + data
+    def handle_endtag(self, tag):
+        if self.current is not None and tag == "a":
+            self.depth -= 1
+            if self.depth <= 0:
+                self.items.append(self.current)
+                self.current = None
+                self.depth = 0
 
-def norm(value):
-    return re.sub(r"[^a-z0-9]+", " ", (value or "").strip().lower()).strip()
+def get_html(url):
+    request = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(request, timeout=35) as response:
+        content_type = response.headers.get("Content-Type", "")
+        if "text/html" not in content_type:
+            raise RuntimeError(f"Expected HTML from {url}, got {content_type}")
+        return response.read(5_000_001).decode("utf-8", errors="replace")
 
-def pick(row, aliases):
-    lookup = {norm(k): (v or "").strip() for k, v in row.items() if k}
-    for alias in aliases:
-        value = lookup.get(norm(alias), "")
-        if value:
-            return value
-    return ""
-
-def read_markaz_catalog():
-    if not CATALOG.exists():
-        raise RuntimeError(
-            f"Markaz Pakistan export not found: {CATALOG}. Export products from the Markaz Pakistan Shop tab "
-            "using Markaz Export to My Store (CSV/Excel), save as catalog/markaz_pakistan_export.csv, "
-            "and commit it to this repository. Do not export from Markaz China."
-        )
-    products = {}
-    with CATALOG.open("r", encoding="utf-8-sig", newline="") as f:
-        sample = f.read(4096)
-        f.seek(0)
-        try:
-            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
-        except csv.Error:
-            dialect = csv.excel
-        for row in csv.DictReader(f, dialect=dialect):
-            title = pick(row, ALIASES["title"])
-            sku = pick(row, ALIASES["sku"])
-            price = pick(row, ALIASES["price"])
-            desc = pick(row, ALIASES["description"])
-            image = pick(row, ALIASES["image"])
-            url = pick(row, ALIASES["url"])
-            source = pick(row, ALIASES["source"])
-            payment = pick(row, ALIASES["payment"])
-            category = pick(row, ALIASES["category"])
-            if not title or not sku:
-                continue
-            combined = " ".join([title, desc, url, source, payment]).lower()
-            if "/china" in combined or "markaz china" in combined or "advance payment" in combined or "prepaid only" in combined:
-                continue
-            if not price or not image:
-                continue
-            key = sku.strip()
-            item = products.setdefault(key, {
-                "sku": key, "title": title, "price_pkr": price, "description": desc[:3500],
-                "category": category, "product_url": url, "source_label": source,
-                "payment_note": payment, "images": []
-            })
-            for raw in re.split(r"[|;\\n]", image):
-                raw = raw.strip()
-                if raw.startswith("https://") and raw not in item["images"]:
-                    item["images"].append(raw)
-    if not products:
-        raise RuntimeError(
-            "No usable Pakistan catalog rows found. CSV must contain product title, SKU, PKR price and image URL. "
-            "China/prepaid rows are deliberately excluded."
-        )
-    return list(products.values())
-
-def fetch_rss(url, source, limit=25):
-    req = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=30) as res:
-        root = ET.fromstring(res.read())
-    rows = []
-    for item in root.findall(".//item")[:limit]:
-        rows.append({
-            "source": source,
-            "title": item.findtext("title", ""),
-            "url": item.findtext("link", ""),
-            "published": item.findtext("pubDate", ""),
-            "snippet": re.sub(r"<[^>]+>", " ", item.findtext("description", ""))[:500]
+def parse_products(html, category):
+    parser = ListingParser()
+    parser.feed(html)
+    products = []
+    for item in parser.items:
+        text = re.sub(r"\s+", " ", item["text"]).strip()
+        price = re.search(r"PKR\s*([\d,]+)", text, re.I)
+        product_id = re.search(r"/(\d+)(?:[/?#]|$)", item["url"])
+        if not price or not product_id:
+            continue
+        title = text[:price.start()].strip()
+        title = re.sub(r"^(?:Top pick|Only\s+\d+\s+left)\s*", "", title, flags=re.I)
+        title = re.sub(r"\s+", " ", title).strip(" -|")
+        if len(title) < 4:
+            title = text.split("PKR", 1)[0].strip()
+        stock = re.search(r"Only\s+(\d+)\s+left", text, re.I)
+        rating = re.search(r"\b([1-5]\.\d)\b", text[price.end():])
+        products.append({
+            "product_id": product_id.group(1),
+            "title": title[:240],
+            "price_pkr": price.group(1).replace(",", ""),
+            "product_url": item["url"],
+            "image_urls": item["images"][:5],
+            "category": category,
+            "stock_label": f"Only {stock.group(1)} left" if stock else "Not shown on listing card",
+            "rating_label": rating.group(1) if rating else "Not shown on listing card",
+            "catalog_source": "Public Markaz Pakistan Shop category listing",
+            "cod_policy_source": "Pakistan Shop category pages state COD availability; exact product checkout still needs owner confirmation",
         })
-    return rows
+    return products
 
-def collect_public_signals():
+def crawl_markaz_shop():
+    products, errors = {}, []
+    for category in CATEGORIES:
+        slug = urllib.parse.quote(category, safe="")
+        for page in range(1, MAX_PAGES + 1):
+            url = f"{BASE}/shop/home-page/{slug}"
+            if page > 1:
+                url += "?" + urllib.parse.urlencode({"page": page})
+            try:
+                html = get_html(url)
+                page_items = parse_products(html, category)
+                for item in page_items[:MAX_PRODUCTS_PER_PAGE]:
+                    products[item["product_url"]] = item
+                print(f"Markaz Pakistan / {category} page {page}: {len(page_items)} product cards")
+                if not page_items:
+                    break
+            except Exception as exc:
+                errors.append(f"{category} page {page}: {exc}")
+                if page == 1:
+                    break
+            time.sleep(0.25)
+    result = list(products.values())
+    if not result:
+        raise RuntimeError("Could not read any public Markaz Pakistan Shop product listings. No China catalog URLs were used.")
+    return result, errors
+
+def fetch_rss(url, source, limit=20):
+    request = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        root = ET.fromstring(response.read())
+    return [{
+        "source": source, "title": item.findtext("title", ""),
+        "url": item.findtext("link", ""), "published": item.findtext("pubDate", ""),
+        "snippet": re.sub(r"<[^>]+>", " ", item.findtext("description", ""))[:450]
+    } for item in root.findall(".//item")[:limit]]
+
+def collect_rss_signals():
     rows, errors = [], []
-    sources = [
+    queries = [
         ("Google Trends Pakistan", "https://trends.google.com/trending/rss?geo=PK"),
-        ("Google News Pakistan ecommerce", "https://news.google.com/rss/search?q=" +
-         urllib.parse.quote('Pakistan online shopping products gadgets home problem solving') +
-         "&hl=en-PK&gl=PK&ceid=PK:en"),
-        ("Google News Pakistan consumer needs", "https://news.google.com/rss/search?q=" +
-         urllib.parse.quote('Pakistan household problems kitchen organization personal care gadgets') +
-         "&hl=en-PK&gl=PK&ceid=PK:en"),
-        ("Google News Pakistan product demand", "https://news.google.com/rss/search?q=" +
-         urllib.parse.quote('Pakistan ecommerce trending products retail consumer demand') +
-         "&hl=en-PK&gl=PK&ceid=PK:en"),
+        ("Pakistan ecommerce news", "https://news.google.com/rss/search?q=" + urllib.parse.quote("Pakistan online shopping products gadgets home") + "&hl=en-PK&gl=PK&ceid=PK:en"),
+        ("Pakistan consumer problems", "https://news.google.com/rss/search?q=" + urllib.parse.quote("Pakistan household kitchen cleaning personal care everyday problems") + "&hl=en-PK&gl=PK&ceid=PK:en"),
+        ("Pakistan retail demand", "https://news.google.com/rss/search?q=" + urllib.parse.quote("Pakistan ecommerce retail consumer demand products") + "&hl=en-PK&gl=PK&ceid=PK:en"),
     ]
-    for source, url in sources:
+    for label, url in queries:
         try:
-            data = fetch_rss(url, source, 25)
-            rows.extend(data)
-            print(f"{source}: {len(data)} public items")
+            rows.extend(fetch_rss(url, label))
         except Exception as exc:
-            errors.append(f"{source}: {exc}")
-    unique = {}
-    for row in rows:
-        key = norm(row["title"])
-        if key:
-            unique[key] = row
+            errors.append(f"{label}: {exc}")
+    unique = {re.sub(r"\W+", " ", x["title"].lower()).strip(): x for x in rows if x["title"].strip()}
     return list(unique.values()), errors
 
-def gemini_json(catalog, signals, errors):
+def grounded_web_research(products):
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     prompt = f"""
-You are Click & Collect's Pakistan product opportunity research analyst.
-Select ONLY from the supplied Markaz Pakistan Shop export. These products came from
-the Pakistan catalog export file, not Markaz China; rows mentioning China/prepaid were
-already removed. Do not invent products or facts.
+Use Google Search to research the Pakistan market for these products actually listed in Markaz Pakistan Shop.
+Focus on product demand signals, Pakistani customer problems/use cases, competitor products, public ads/videos/reels,
+common price bands, reviews/complaints, and whether these are easy to demonstrate visually.
+Prefer Pakistan sources, Pakistani retailers, local marketplaces, public social posts/videos and recent pages.
+Do not invent sales, order counts, ad spend, ROAS, or viral metrics. State when results are not available.
+Return a concise research memo with source titles, URLs and dates. Separate facts from hypotheses.
+PRODUCT CANDIDATES:
+{json.dumps([{"id":p["product_id"],"title":p["title"],"price_pkr":p["price_pkr"],"category":p["category"],"url":p["product_url"]} for p in products[:120]],ensure_ascii=False)}
+"""
+    body = {"contents": [{"parts": [{"text": prompt}]}],
+            "tools": [{"googleSearch": {}}],
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 7000}}
+    request = urllib.request.Request(endpoint, data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY}, method="POST")
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                result = json.loads(response.read().decode())
+            break
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", "replace")
+            if error.code not in (408,429,500,502,503,504) or attempt == 3:
+                raise RuntimeError(f"Gemini Google Search grounding failed ({error.code}): {detail[:1000]}")
+            time.sleep(5 * (2 ** attempt))
+    candidate = result.get("candidates", [{}])[0]
+    memo = "\n".join(p.get("text", "") for p in candidate.get("content", {}).get("parts", []) if p.get("text")).strip()
+    metadata = candidate.get("groundingMetadata", {})
+    sources = []
+    for chunk in metadata.get("groundingChunks", []):
+        web = chunk.get("web", {})
+        if web.get("uri"):
+            sources.append({"title": web.get("title", ""), "url": web["uri"]})
+    if not memo:
+        raise RuntimeError("Google Search grounding returned no research memo.")
+    return memo, sources
 
-Evaluate each plausible product for:
-- clear everyday problem solved and urgency
-- broad Pakistan audience and likely buyer persona
-- visual demonstration potential for Instagram/Facebook
-- price accessibility using only supplied PKR price
-- competition and differentiation using public evidence below
-- seasonality, fragility, sizing/compatibility, returns and compliance risks
-- whether supplied evidence supports a small test
+def gemini_select(products, rss_signals, rss_errors, web_memo, web_sources):
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
+    prompt = f"""
+You are the product opportunity analyst for Click & Collect, a Pakistan online store.
+Choose only among the exact products in the live public Markaz Pakistan Shop catalogue below.
+All candidates come from /shop/product/ pages linked from Markaz Pakistan Shop category pages.
+Never select a URL containing /china/.
+
+Rank products for problem-solving value, urgent everyday use, broad Pakistani audience,
+easy visual demonstration, accessible listed PKR price, low return/quality/compliance risk,
+and evidence of interest in Pakistan. Prefer products that solve a specific problem over
+generic fashion or novelty items.
 
 Return STRICT JSON only:
 {{
- "shortlist":[{{"sku":"EXACT supplied SKU","score":1-10,"problem_solved":"...","buyer":"...","evidence_summary":"...","risks":["..."],"recommendation":"TEST_SMALL or REJECT","confidence":"high/medium/low"}}],
- "selected_sku":"EXACT SKU or empty string",
+ "shortlist":[{{"product_id":"EXACT id","score":1-10,"problem_solved":"...","buyer":"...","evidence_summary":"...","creative_angle":"...","risks":["..."],"recommendation":"TEST_SMALL or REJECT","confidence":"high/medium/low"}}],
+ "selected_product_id":"EXACT id or empty",
  "selection_reason":"...",
  "research_gaps":["..."],
  "market_signals":[{{"claim":"...","source_url":"...","published":"...","strength":"strong/medium/weak"}}]
 }}
 Rules:
-- Score is an opportunity hypothesis, NOT a sales forecast.
-- News and Google Trends are not proof of product sales, conversion or monthly units.
-- Never claim exact sales estimates, viral status or competitor prices without evidence.
-- Only select a product scoring >=7 with a clear problem solved and no critical safety/compliance risk.
-- If evidence is weak, set selected_sku to empty and explain why.
-- Do not claim product-level COD is verified solely by generic Markaz policy. Mark COD as requiring final product checkout confirmation.
-- Use source URLs and publication dates from the evidence; don't fabricate citations.
+- Opportunity score is a hypothesis, not sales data.
+- Never invent monthly sales, conversion, views, competitor prices, review counts or virality.
+- Only select score >=7, with clear problem solved and no critical safety/compliance concern.
+- If evidence is weak, leave selected_product_id empty.
+- Do not claim COD is verified at product checkout. Markaz Pakistan category pages state COD, but owner must check exact item.
+- Cite only URLs from the supplied web memo or RSS sources.
+- Mention if competitor ad/reel evidence is sparse.
 
-MARKAZ PAKISTAN CATALOG:
-{json.dumps(catalog, ensure_ascii=False)}
+LIVE MARKAZ PAKISTAN CATALOGUE:
+{json.dumps(products[:250],ensure_ascii=False)}
 
-PUBLIC PAKISTAN SIGNALS:
-{json.dumps(signals, ensure_ascii=False)}
+GOOGLE SEARCH RESEARCH MEMO:
+{web_memo}
 
-SOURCE COLLECTION ERRORS:
-{json.dumps(errors, ensure_ascii=False)}
+GOOGLE SEARCH SOURCES:
+{json.dumps(web_sources,ensure_ascii=False)}
+
+GOOGLE TRENDS / NEWS RSS:
+{json.dumps(rss_signals,ensure_ascii=False)}
+
+RSS COLLECTION ERRORS:
+{json.dumps(rss_errors,ensure_ascii=False)}
 """
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json", "maxOutputTokens": 7000}
-    }
-    req = urllib.request.Request(endpoint, data=json.dumps(payload).encode(),
+    body = {"contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json", "maxOutputTokens": 7000}}
+    request = urllib.request.Request(endpoint, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY}, method="POST")
     for attempt in range(5):
         try:
-            with urllib.request.urlopen(req, timeout=180) as res:
-                result = json.loads(res.read().decode())
+            with urllib.request.urlopen(request, timeout=180) as response:
+                result = json.loads(response.read().decode())
             break
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")
-            if exc.code not in (408,429,500,502,503,504) or attempt == 4:
-                raise RuntimeError(f"Gemini API HTTP {exc.code}: {detail[:1000]}")
-            time.sleep(4 * (2 ** attempt))
-    parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-    text = "\n".join(p.get("text", "") for p in parts if p.get("text")).strip()
-    if not text:
-        raise RuntimeError("Gemini returned no product discovery JSON.")
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", "replace")
+            if error.code not in (408,429,500,502,503,504) or attempt == 4:
+                raise RuntimeError(f"Gemini product selection failed ({error.code}): {detail[:1000]}")
+            time.sleep(5 * (2 ** attempt))
+    text = "\n".join(p.get("text", "") for p in result.get("candidates", [{}])[0].get("content", {}).get("parts", []) if p.get("text")).strip()
     try:
         return json.loads(text)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Gemini returned invalid JSON: {text[:1000]}") from exc
+        raise RuntimeError(f"Gemini returned invalid product selection JSON: {text[:1200]}") from exc
 
 def main():
     if not API_KEY:
         raise RuntimeError("GEMINI_API_KEY secret is missing.")
-    catalog = read_markaz_catalog()
-    signals, errors = collect_public_signals()
-    if not signals:
-        raise RuntimeError("No public Pakistan market signals were collected; refusing to make an unsupported product pick.")
-    result = gemini_json(catalog, signals, errors)
-    by_sku = {p["sku"]: p for p in catalog}
-    shortlist = result.get("shortlist", [])
-    for row in shortlist:
-        if row.get("sku") not in by_sku:
-            raise RuntimeError("Gemini returned a SKU that is not present in the Markaz export.")
-    selected_sku = str(result.get("selected_sku", "")).strip()
-    selected = by_sku.get(selected_sku)
+    products, crawl_errors = crawl_markaz_shop()
+    rss_signals, rss_errors = collect_rss_signals()
+    web_memo, web_sources = grounded_web_research(products)
+    analysis = gemini_select(products, rss_signals, rss_errors + crawl_errors, web_memo, web_sources)
+    by_id = {p["product_id"]: p for p in products}
+    for item in analysis.get("shortlist", []):
+        if str(item.get("product_id")) not in by_id:
+            raise RuntimeError("Gemini returned a product ID not found in the Markaz Pakistan catalogue crawl.")
+    selected_id = str(analysis.get("selected_product_id", "")).strip()
+    selected = by_id.get(selected_id)
     if selected:
-        score = next((x.get("score", 0) for x in shortlist if x.get("sku") == selected_sku), 0)
+        score = next((x.get("score", 0) for x in analysis.get("shortlist", []) if str(x.get("product_id")) == selected_id), 0)
         if not isinstance(score, (int, float)) or score < 7:
-            raise RuntimeError("Selected product did not pass the minimum opportunity score.")
+            raise RuntimeError("Selected product did not meet the minimum evidence score.")
         selected = dict(selected)
-        selected["research_assessment"] = next(x for x in shortlist if x.get("sku") == selected_sku)
-        selected["cod_status"] = "NOT_INDEPENDENTLY_VERIFIED — confirm on the exact Pakistan product checkout before approval"
-        selected["catalog_source"] = "User-exported Markaz Pakistan Shop CSV; China/prepaid indicators filtered"
+        selected["research_assessment"] = next(x for x in analysis.get("shortlist", []) if str(x.get("product_id")) == selected_id)
+        selected["cod_status"] = "Pakistan Shop category policy states COD; exact product checkout must be confirmed by owner"
     OUT.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).isoformat()
-    (OUT / "product_discovery_report.json").write_text(json.dumps({
-        "generated_at_utc": timestamp, "catalog_file": str(CATALOG),
-        "catalog_products_scanned": len(catalog), "public_signal_count": len(signals),
-        "selected_product": selected, "analysis": result, "source_errors": errors
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
-    md = ["# Pakistan Product Discovery", "", f"Generated (UTC): {timestamp}",
-          f"Markaz Pakistan catalog rows scanned: {len(catalog)}",
-          f"Public market signals collected: {len(signals)}", ""]
+    payload = {"generated_at_utc": timestamp, "markaz_products_scanned": len(products),
+               "selected_product": selected, "analysis": analysis,
+               "google_search_memo": web_memo, "google_search_sources": web_sources,
+               "rss_signals": rss_signals, "collection_errors": crawl_errors + rss_errors}
+    (OUT / "product_discovery_report.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    lines = ["# Pakistan Product Discovery", "", f"Generated (UTC): {timestamp}",
+             f"Markaz Pakistan public products scanned: {len(products)}", ""]
     if selected:
-        md += ["## Recommended product for owner verification", "",
-               f"- **{selected['title']}**", f"- SKU: {selected['sku']}",
-               f"- Markaz export price: PKR {selected['price_pkr']}",
-               f"- Opportunity score: {selected['research_assessment'].get('score')}/10",
-               f"- Problem solved: {selected['research_assessment'].get('problem_solved')}",
-               f"- COD: {selected['cod_status']}", "",
-               "### Why it was shortlisted", selected['research_assessment'].get('evidence_summary',''), "",
-               "### Risks", *[f"- {x}" for x in selected['research_assessment'].get('risks', [])], ""]
+        a = selected["research_assessment"]
+        lines += ["## Recommended product — verify exact COD before campaign", "",
+                  f"- **{selected['title']}**", f"- Markaz product ID: {selected['product_id']}",
+                  f"- Listed price: PKR {selected['price_pkr']}", f"- Category: {selected['category']}",
+                  f"- Product page: {selected['product_url']}", f"- Opportunity score: {a.get('score')}/10",
+                  f"- Problem solved: {a.get('problem_solved')}", f"- Buyer: {a.get('buyer')}",
+                  f"- Creative angle: {a.get('creative_angle')}", f"- COD status: {selected['cod_status']}", "",
+                  "### Evidence", a.get("evidence_summary", ""), "",
+                  "### Risks", *[f"- {x}" for x in a.get("risks", [])], ""]
     else:
-        md += ["## No product passed the evidence threshold", "", result.get("selection_reason", "No safe candidate selected."), ""]
-    md += ["## Shortlist", ""]
-    for item in shortlist:
-        md += [f"- **{item.get('sku')}** — {item.get('score')}/10 — {item.get('recommendation')} — {item.get('problem_solved')}"]
-    md += ["", "## Research gaps", *[f"- {x}" for x in result.get("research_gaps", [])],
-           "", "## Source signals"]
-    for item in result.get("market_signals", []):
-        md += [f"- {item.get('claim')} — {item.get('published')} — {item.get('source_url')} ({item.get('strength')})"]
-    md += ["", "## Verification warning", "A Pakistan catalog export is not a live inventory guarantee. Open the exact product in Markaz Pakistan Shop and confirm current stock, price, variant, COD checkout, delivery, returns and supplier terms before approving."]
-    (OUT / "product_discovery_report.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+        lines += ["## No product passed the evidence threshold", "", analysis.get("selection_reason", "No candidate selected."), ""]
+    lines += ["## Shortlist", ""]
+    for item in analysis.get("shortlist", []):
+        p = by_id[str(item.get("product_id"))]
+        lines.append(f"- **{p['title']}** — ID {p['product_id']} — {item.get('score')}/10 — {item.get('problem_solved')}")
+    lines += ["", "## Grounded web research", web_memo, "", "## Source links"]
+    for source in web_sources:
+        lines.append(f"- {source.get('title')}: {source.get('url')}")
+    lines += ["", "## Research gaps", *[f"- {x}" for x in analysis.get("research_gaps", [])],
+              "", "## Verification warning", "Markaz listing pages are a public snapshot. Before campaign generation, open the exact product in Pakistan Shop and confirm current stock, variant, price and COD at checkout. China catalogue pages are excluded."]
+    (OUT / "product_discovery_report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if selected:
         (OUT / "selected_product.json").write_text(json.dumps(selected, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print("Product discovery finished. Selected candidate:", selected_sku or "NONE")
+    print(f"Scanned {len(products)} Markaz Pakistan products. Selected: {selected_id or 'NONE'}")
 
 if __name__ == "__main__":
     main()

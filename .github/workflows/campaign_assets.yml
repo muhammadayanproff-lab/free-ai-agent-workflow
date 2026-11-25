@@ -1,21 +1,22 @@
 name: Prepare Product Campaign Assets
-
 on:
   workflow_dispatch:
     inputs:
-      product_sku:
-        description: "Exact SKU from the latest Pakistan Product Discovery report"
+      product_url:
+        description: "Exact Markaz Pakistan Shop product URL from the discovery report"
         required: true
         type: string
       cod_confirmed:
-        description: "Confirm you checked COD on this exact product in Markaz Pakistan Shop"
+        description: "Confirm you opened this exact product in Pakistan Shop and COD is available at checkout"
         required: true
         type: choice
         options: ["NO", "YES"]
-
+      product_category:
+        description: "Optional product category from the discovery report"
+        required: false
+        type: string
 permissions:
   contents: read
-
 jobs:
   prepare:
     if: inputs.cod_confirmed == 'YES'
@@ -26,13 +27,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Verify selected Markaz Pakistan product and download original photos
+      - name: Verify public Markaz Pakistan listing and download original photos
         env:
-          PRODUCT_SKU: ${{ inputs.product_sku }}
+          PRODUCT_URL: ${{ inputs.product_url }}
+          PRODUCT_CATEGORY: ${{ inputs.product_category }}
           MARKAZ_COD_CONFIRMED: ${{ inputs.cod_confirmed }}
-          MARKAZ_CATALOG: catalog/markaz_pakistan_export.csv
         run: python agents/prepare_product.py
-      - name: Analyze Pakistan demand, competitors and risks
+      - name: Analyze Pakistan demand, competitor products and creative examples
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_TEXT_MODEL: gemini-2.5-flash
@@ -49,7 +50,6 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_VISION_MODEL: gemini-2.5-flash
           PRODUCT_IMAGES_DIR: source_product_images
-          PRODUCT_DETAILS: ${{ inputs.product_sku }}
         run: python agents/video_prompt_agent.py
       - name: Write SEO package and four separate captions
         env:
@@ -71,7 +71,7 @@ jobs:
             echo "# Click & Collect — Campaign Review"
             echo
             echo "Check original supplier photos against all AI concepts. AI concepts can change product details."
-            echo "The owner has confirmed COD for the selected SKU, but stock and price can change."
+            echo "The owner confirmed COD for this exact Pakistan Shop listing; stock and price can change."
             echo
             echo "## Market analysis"
             cat market_analysis/market_analysis.md
@@ -86,7 +86,7 @@ jobs:
             cat campaign_media_urls.json
             echo
             echo "## Manual video step"
-            echo "Copy video_prompt_output/video_prompt.txt into your chosen video generator. Upload the finished video to Cloudinary and copy its public HTTPS URL for the publishing workflow."
+            echo "Copy video_prompt_output/video_prompt.txt into your chosen video generator. Upload the finished video through the upload page and copy its public HTTPS URL for the publishing workflow."
           } > campaign_review/REVIEW.md
       - uses: actions/upload-artifact@v4
         with:

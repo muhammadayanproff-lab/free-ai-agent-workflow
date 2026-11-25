@@ -56,13 +56,13 @@ Return Markdown with:
 5. Likely purchase objections, return/quality/size/compatibility risks and seasonality.
 6. Click & Collect fit: low/medium/high with reasoning.
 7. A conservative test recommendation, suggested customer segment and ad hook.
-8. What evidence is missing.
+8. What evidence is missing.\n9. Search the public web for competitor product listings, public ad/video examples and real customer reviews; cite source URLs and dates. Do not imply private Instagram/TikTok analytics access.\n10. Give a qualitative sales potential rating (low/medium/high) with assumptions; do not invent unit counts.
 
 Do not provide numerical unit-sales forecasts, guaranteed sales or fabricated social metrics.
 Google Trends/news are signals, not order data. Separate verified product facts from inference.
 """
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
-    body = {"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"temperature":0.25,"maxOutputTokens":5000}}
+    body = {"contents":[{"parts":[{"text":prompt}]}],"tools":[{"googleSearch":{}}],"generationConfig":{"temperature":0.25,"maxOutputTokens":6000}}
     req = urllib.request.Request(endpoint, data=json.dumps(body).encode(), headers={"Content-Type":"application/json","x-goog-api-key":API_KEY}, method="POST")
     for attempt in range(5):
         try:
@@ -77,7 +77,7 @@ Google Trends/news are signals, not order data. Separate verified product facts 
     if not report: raise RuntimeError("Gemini returned an empty market analysis.")
     Path("market_analysis").mkdir(exist_ok=True)
     Path("market_analysis/market_analysis.md").write_text("# Pakistan Market & Trend Analysis\n\n"+report+"\n",encoding="utf-8")
-    Path("market_analysis/public_evidence.json").write_text(json.dumps({"sources":sources,"errors":errors},ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    Path("market_analysis/public_evidence.json").write_text(json.dumps({"rss_sources":sources,"grounded_search_sources":grounded_sources,"errors":errors},ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     print(f"Market analysis completed with {len(sources)} public source items.")
 
 if __name__=="__main__": main()
