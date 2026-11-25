@@ -30,9 +30,8 @@ jobs:
           echo "Website files found:"
           find docs -maxdepth 2 -type f -print
       - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: github-pages
           path: docs
           retention-days: 1
       - name: Deploy to GitHub Pages
