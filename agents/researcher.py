@@ -232,6 +232,66 @@ def discover_gemini_text_models():
     return ordered[:12]
 
 
+def groq_chat_completion(prompt, max_tokens=5000):
+    """Optional OpenAI-compatible fallback using Groq-hosted open-weight models."""
+    groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    if not groq_key:
+        return None
+    headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+    models_request = urllib.request.Request(
+        "https://api.groq.com/openai/v1/models", headers=headers
+    )
+    preferred = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+    try:
+        with urllib.request.urlopen(models_request, timeout=15) as response:
+            catalogue = json.loads(response.read().decode("utf-8"))
+        available = [
+            item.get("id", "") for item in catalogue.get("data", [])
+            if item.get("id") and item.get("active", True)
+        ]
+        candidates = list(dict.fromkeys([m for m in preferred if m in available] + available))[:5]
+    except Exception as exc:
+        print(f"Groq model catalogue unavailable: {exc}")
+        candidates = preferred
+    errors = []
+    for model_name in candidates:
+        body = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+        }
+        request = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=json.dumps(body).encode("utf-8"), headers=headers, method="POST"
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            content = result["choices"][0]["message"]["content"]
+            print(f"Open-weight fallback succeeded with Groq model: {model_name}")
+            return json.loads(content)
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", "replace")
+            errors.append(f"{model_name} HTTP {error.code}: {detail[:300]}")
+            print(f"Groq model {model_name} unavailable (HTTP {error.code}); trying next model.")
+        except (TimeoutError, socket.timeout, urllib.error.URLError, KeyError, IndexError, json.JSONDecodeError) as error:
+            errors.append(f"{model_name}: {error}")
+            print(f"Groq model {model_name} failed; trying next model: {error}")
+    print("All Groq open-weight fallbacks failed: " + " | ".join(errors))
+    return None
+
+
+def preflight_groq():
+    """Quick optional cross-provider check before the product catalogue crawl."""
+    key = os.getenv("GROQ_API_KEY", "").strip()
+    if not key:
+        return False
+    result = groq_chat_completion('Return strict JSON only: {"status":"OK"}.', max_tokens=30)
+    return bool(result and result.get("status") == "OK")
+
+
 def gemini_select(products, rss_signals, rss_errors, web_memo, web_sources):
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     prompt = f"""
@@ -330,9 +390,14 @@ RSS COLLECTION ERRORS:
                     time.sleep(10)
         if result is not None:
             break
+    if result is None and os.getenv("GROQ_API_KEY", "").strip():
+        print("Gemini model pool exhausted; trying independent Groq open-weight models.")
+        groq_result = groq_chat_completion(prompt, max_tokens=5000)
+        if groq_result is not None:
+            return groq_result
     if result is None:
         raise RuntimeError(
-            "Gemini product selection failed on primary and fallback models. "
+            "Gemini and optional Groq product selection fallbacks failed. "
             "Stopped after bounded retries to avoid wasting runner time. Details: "
             + " | ".join(errors)
         )
@@ -378,8 +443,11 @@ def preflight_gemini_model():
         except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
             errors.append(f"{model_name} network/timeout: {error}")
             print(f"Gemini preflight: {model_name} unavailable ({error}).")
+    if preflight_groq():
+        print("Independent Groq preflight passed; product selection has a cross-provider fallback.")
+        return
     raise RuntimeError(
-        "Gemini preflight failed for primary and fallback models. "
+        "Gemini preflight failed for all key-enabled models and Groq is not configured or unavailable. "
         "Stopped before Markaz crawling to avoid wasting runner time. "
         + " | ".join(errors)
     )
