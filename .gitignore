@@ -23,3 +23,12 @@ downloaded-media/
 *.jpeg
 *.png
 *.zip
+
+# Generated campaign outputs
+product_discovery_output/
+product_data/
+source_product_images/
+market_analysis/
+video_prompt_output/
+campaign_copy/
+campaign_media_urls.json
