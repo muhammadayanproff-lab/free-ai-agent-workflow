@@ -257,7 +257,7 @@ RSS COLLECTION ERRORS:
     result = None
     last_error = None
     # Retry transient API/network timeouts with a fresh request each time.
-    for attempt in range(4):
+    for attempt in range(8):
         request = urllib.request.Request(endpoint, data=payload,
             headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY}, method="POST")
         try:
@@ -267,19 +267,19 @@ RSS COLLECTION ERRORS:
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", "replace")
             last_error = RuntimeError(f"Gemini product selection failed ({error.code}): {detail[:1000]}")
-            if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 3:
+            if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 7:
                 raise last_error
         except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
             last_error = error
-            if attempt == 3:
+            if attempt == 7:
                 raise RuntimeError(
-                    f"Gemini product selection timed out after 4 attempts: {error}"
+                    f"Gemini product selection timed out after 8 attempts: {error}"
                 ) from error
-        delay = min(15 * (2 ** attempt), 90)
-        print(f"Gemini product selection attempt {attempt + 1} did not complete; retrying in {delay}s.")
+        delay = min(30 * (2 ** attempt), 180)
+        print(f"Gemini product selection attempt {attempt + 1}/8 did not complete; retrying in {delay}s. Temporary 503/429/5xx errors are retried with a longer cooldown.")
         time.sleep(delay)
     if result is None:
-        raise RuntimeError(f"Gemini product selection failed after retries: {last_error}")
+        raise RuntimeError(f"Gemini product selection is still unavailable after 8 attempts with cooldowns. No product was auto-selected to avoid inventing an AI recommendation. Last error: {last_error}")
     text = "\n".join(p.get("text", "") for p in result.get("candidates", [{}])[0].get("content", {}).get("parts", []) if p.get("text")).strip()
     try:
         return json.loads(text)
