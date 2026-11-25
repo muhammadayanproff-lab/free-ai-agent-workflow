@@ -60,7 +60,7 @@ def find_products(value):
 def main():
     if not COD_CONFIRMED:
         raise RuntimeError("Confirm COD on the exact selected product in Markaz Pakistan Shop before campaign preparation.")
-    selected_path = Path("product_discovery/selected_product.json")
+    selected_path = Path("product_discovery_output/selected_product.json")
     if not selected_path.is_file():
         raise RuntimeError("Latest successful Product Discovery artifact has no selected product. Run Product Discovery and review its report first.")
     selected = json.loads(selected_path.read_text(encoding="utf-8"))

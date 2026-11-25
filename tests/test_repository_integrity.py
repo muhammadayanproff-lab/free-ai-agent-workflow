@@ -34,8 +34,28 @@ class RepositoryIntegrityTests(unittest.TestCase):
     def test_video_generation_removed_prompt_agent_present(self):
         self.assertTrue((ROOT / "agents" / "video_prompt_agent.py").is_file())
         self.assertFalse((ROOT / "agents" / "video_creator.py").exists())
+        self.assertFalse((ROOT / ".github" / "workflows" / "video_prompt.yml").exists())
+        self.assertFalse((ROOT / "agents" / "manager.py").exists())
+        self.assertFalse((ROOT / ".github" / "workflows" / "manager.yml").exists())
+        self.assertFalse((ROOT / "agents" / "trend_analyst.py").exists())
+        self.assertFalse((ROOT / ".github" / "workflows" / "trend_analyst.yml").exists())
+        self.assertFalse((ROOT / "agents" / "video_creator.py").exists())
         self.assertFalse((ROOT / ".github" / "workflows" / "video_creator.yml").exists())
         self.assertFalse((ROOT / ".github" / "workflows" / "daily_campaign.yml").exists())
+
+    def test_product_discovery_artifact_handoff_path_matches(self):
+        discovery = (ROOT / ".github" / "workflows" / "product_discovery.yml").read_text(encoding="utf-8")
+        campaign = (ROOT / ".github" / "workflows" / "campaign_assets.yml").read_text(encoding="utf-8")
+        prepare = (ROOT / "agents" / "prepare_product.py").read_text(encoding="utf-8")
+        self.assertIn("product_discovery_output/", discovery)
+        self.assertIn("--dir product_discovery_output", campaign)
+        self.assertIn("product_discovery_output/selected_product.json", prepare)
+
+    def test_video_upload_preset_is_automated(self):
+        self.assertTrue((ROOT / "agents" / "configure_video_upload.py").is_file())
+        self.assertTrue((ROOT / ".github" / "workflows" / "configure_video_upload.yml").is_file())
+        page = (ROOT / "docs" / "upload-video.html").read_text(encoding="utf-8")
+        self.assertIn("click_collect_manual_video", page)
 
     def test_manual_video_upload_page_present(self):
         self.assertTrue((ROOT / "docs" / "upload-video.html").is_file())

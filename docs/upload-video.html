@@ -17,12 +17,12 @@ button:disabled{opacity:.5;cursor:wait}.muted{font-size:12px;color:#94a6bd}.stat
 <h1>Upload your finished product video</h1>
 <p>Select the video you generated using the AI prompt. This page uploads it directly to your Cloudinary account. It does not publish anything to Instagram or Facebook.</p>
 <div class="field"><label for="cloud">Cloudinary cloud name</label><input id="cloud" value="fzhm9huq" autocomplete="off"></div>
-<div class="field"><label for="preset">Cloudinary unsigned upload preset</label><input id="preset" placeholder="Enter the unsigned preset name"></div>
+<div class="field"><label for="preset">Cloudinary unsigned upload preset</label><input id="preset" value="click_collect_manual_video" readonly></div>
 <div class="field"><label for="file">Video file (MP4, MOV or WEBM; max 100 MB)</label><input id="file" type="file" accept="video/mp4,video/quicktime,video/webm"></div>
 <button id="upload">Upload video</button>
 <div id="status" class="status" role="status"></div>
 <div id="result" class="url"><label for="videoUrl">Public video URL — copy this into the GitHub publishing workflow</label><input id="videoUrl" readonly><button id="copy">Copy video URL</button></div>
-<p class="muted">Security: this page uses an unsigned Cloudinary preset, never your Cloudinary API secret. Configure the preset to allow video uploads only, restrict formats and size, and use the click-and-collect/manual-videos folder.</p>
+<p class="muted">Security: this page uses an unsigned Cloudinary preset, never your Cloudinary API secret. Run the GitHub Actions workflow “Configure Cloudinary Video Upload” once to create the restricted unsigned preset. It allows MP4/MOV/WEBM and stores uploads in click-and-collect/manual-videos. This page checks 100 MB in your browser; Cloudinary presets do not enforce a per-preset file-size cap.</p>
 </main>
 <script>
 const $=id=>document.getElementById(id);

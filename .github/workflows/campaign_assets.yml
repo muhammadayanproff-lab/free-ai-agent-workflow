@@ -30,8 +30,8 @@ jobs:
             echo "No successful Product Discovery run found. Run Product Discovery first."
             exit 1
           fi
-          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name pakistan-product-discovery --dir product_discovery
-          test -f product_discovery/selected_product.json
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name pakistan-product-discovery --dir product_discovery_output
+          test -f product_discovery_output/selected_product.json
       - name: Verify selected Pakistan Shop listing and download original photos
         env:
           MARKAZ_COD_CONFIRMED: ${{ inputs.cod_confirmed }}

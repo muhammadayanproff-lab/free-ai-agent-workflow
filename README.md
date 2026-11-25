@@ -30,7 +30,7 @@ Optional variable: `META_GRAPH_API_VERSION` (default `v27.0`).
 
 ## One-time video upload setup
 
-1. In Cloudinary, create an **unsigned upload preset** restricted to MP4/MOV/WEBM, a sensible file-size limit, and folder `click-and-collect/manual-videos`.
+1. In GitHub Actions, run **Configure Cloudinary Video Upload** once. It creates or updates the unsigned preset `click_collect_manual_video`, restricts formats to MP4/MOV/WEBM, and sets the destination folder. The page enforces a 100 MB browser-side limit; Cloudinary presets do not provide a per-preset file-size cap.
 2. In repository Settings → Pages, select **GitHub Actions** as the build source. The GitHub Actions integration cannot enable Pages on this repository until you do this one-time setting.
 3. After successful deployment, open `https://muhammadayanproff-lab.github.io/free-ai-agent-workflow/upload-video.html`.
 4. Enter the unsigned preset name on the page and upload your video. Never put your Cloudinary API secret in the page.
