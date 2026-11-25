@@ -67,6 +67,9 @@ class RepositoryIntegrityTests(unittest.TestCase):
         self.assertIn('workflows: ["Pakistan Product Discovery"]', campaign)
         self.assertIn("workflow_run:", campaign)
         self.assertNotIn("cod_confirmed:", campaign)
+        self.assertIn("Notify owner that the video prompt is ready", campaign)
+        self.assertIn("gh issue create", campaign)
+        self.assertIn("issues: write", campaign)
 
     def test_video_upload_auto_approval_and_owner_gate(self):
         watcher = (ROOT / ".github" / "workflows" / "video_upload_watcher.yml").read_text(encoding="utf-8")
