@@ -33,6 +33,7 @@ def groq_chat(prompt, max_tokens=5000, json_mode=False, image_paths=None):
         return None
     headers = {"Authorization": "Bearer " + key, "Content-Type": "application/json"}
     vision_paths = [Path(p) for p in (image_paths or [])]
+    available = []
     try:
         available = _models(headers)
     except Exception as exc:
@@ -51,7 +52,7 @@ def groq_chat(prompt, max_tokens=5000, json_mode=False, image_paths=None):
             return None
     else:
         preferred = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
-        candidates = list(dict.fromkeys([m for m in preferred if m in available] + available))[:5]
+        candidates = (list(dict.fromkeys([m for m in preferred if m in available] + available)) if available else preferred)[:5]
 
     errors = []
     for model in candidates:
