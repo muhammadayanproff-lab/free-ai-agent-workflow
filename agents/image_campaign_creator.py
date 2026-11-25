@@ -9,7 +9,7 @@ from pathlib import Path
 API_KEY=os.environ.get("GEMINI_API_KEY","").strip()
 CF_ACCOUNT=os.environ.get("CLOUDFLARE_ACCOUNT_ID","").strip()
 CF_TOKEN=os.environ.get("CLOUDFLARE_API_TOKEN","").strip()
-TEXT_MODEL=os.getenv("GEMINI_TEXT_MODEL","gemini-2.5-flash")
+TEXT_MODEL=os.getenv("GEMINI_TEXT_MODEL","gemini-3.8-flash")
 IMAGE_MODEL="@cf/black-forest-labs/flux-1-schnell"
 
 def gemini_prompts(product, analysis):
