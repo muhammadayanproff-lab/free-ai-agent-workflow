@@ -29,32 +29,64 @@ Market analysis: {analysis[:7000]}
     body={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"temperature":0.55,"responseMimeType":"application/json","maxOutputTokens":2500}}
     req=urllib.request.Request(endpoint,data=json.dumps(body).encode(),headers={"Content-Type":"application/json","x-goog-api-key":API_KEY},method="POST")
     data = None
+    gemini_error = ""
     for attempt in (range(5) if API_KEY else range(0)):
         try:
-            with urllib.request.urlopen(req,timeout=180) as res: data=json.loads(res.read().decode())
+            with urllib.request.urlopen(req,timeout=90) as res:
+                data=json.loads(res.read().decode())
             break
         except urllib.error.HTTPError as exc:
             detail=exc.read().decode("utf-8","replace")
-            if exc.code not in (408,429,500,502,503,504) or attempt==4: raise RuntimeError(f"Gemini prompt generation HTTP {exc.code}: {detail[:800]}")
-            time.sleep(5*(2**attempt))
+            gemini_error=f"Gemini HTTP {exc.code}: {detail[:500]}"
+            if exc.code not in (408,429,500,502,503,504):
+                print(gemini_error)
+                break
+            if attempt < 4:
+                delay=min(30,5*(2**attempt))
+                print(f"{gemini_error}; retrying in {delay}s.")
+                time.sleep(delay)
+        except (TimeoutError, OSError) as exc:
+            gemini_error=f"Gemini network/timeout: {exc}"
+            if attempt < 4:
+                time.sleep(min(30,5*(2**attempt)))
+    if data is None:
+        print(f"{gemini_error or 'Gemini is not configured.'} Trying Groq fallback.")
     if data is not None:
         text="\n".join(p.get("text","") for p in data.get("candidates",[{}])[0].get("content",{}).get("parts",[]) if p.get("text"))
         try: prompts=json.loads(text).get("prompts",[])
         except Exception as exc: raise RuntimeError(f"Invalid image prompt JSON: {text[:700]}") from exc
     else:
-        print("Gemini image-prompt generation unavailable; trying Groq JSON fallback.")
         fallback = groq_chat(prompt, max_tokens=2500, json_mode=True)
         prompts = fallback.get("prompts", []) if isinstance(fallback, dict) else []
-    if len(prompts)!=3 or not all(isinstance(x,str) and len(x)>30 for x in prompts): raise RuntimeError("Gemini did not return exactly three usable image prompts.")
+    if len(prompts)!=3 or not all(isinstance(x,str) and len(x)>30 for x in prompts): raise RuntimeError("Gemini and Groq did not return exactly three usable image prompts. Check GROQ_API_KEY access and provider quotas.")
     return prompts
 
 def generate(prompt, path):
     url=f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT}/ai/run/{IMAGE_MODEL}"
     payload={"prompt":prompt,"steps":4}
     req=urllib.request.Request(url,data=json.dumps(payload).encode(),headers={"Authorization":"Bearer "+CF_TOKEN,"Content-Type":"application/json"},method="POST")
-    try:
-        with urllib.request.urlopen(req,timeout=180) as res: result=json.loads(res.read().decode())
-    except urllib.error.HTTPError as exc: raise RuntimeError(f"Cloudflare image API HTTP {exc.code}: {exc.read().decode('utf-8','replace')[:800]}")
+    result = None
+    last_error = ""
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(req,timeout=180) as res:
+                result=json.loads(res.read().decode())
+            break
+        except urllib.error.HTTPError as exc:
+            detail=exc.read().decode("utf-8","replace")
+            last_error=f"Cloudflare image API HTTP {exc.code}: {detail[:700]}"
+            if exc.code not in (408,429,500,502,503,504) or attempt == 3:
+                raise RuntimeError(last_error) from exc
+            delay=10*(attempt+1)
+            print(f"{last_error}; retrying in {delay}s.")
+            time.sleep(delay)
+        except (TimeoutError, OSError) as exc:
+            last_error=f"Cloudflare image API network/timeout: {exc}"
+            if attempt == 3:
+                raise RuntimeError(last_error) from exc
+            time.sleep(10*(attempt+1))
+    if result is None:
+        raise RuntimeError(last_error or "Cloudflare image generation returned no response.")
     image=result.get("result",{}).get("image")
     if not image: raise RuntimeError("Cloudflare returned no image.")
     path.write_bytes(base64.b64decode(image))
