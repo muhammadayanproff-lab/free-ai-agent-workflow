@@ -1,18 +1,16 @@
 name: Prepare Product Campaign Assets
 on:
+  workflow_run:
+    workflows: ["Pakistan Product Discovery"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      cod_confirmed:
-        description: "Confirm you opened the recommended product from the latest report in Markaz Pakistan Shop and COD is available at checkout"
-        required: true
-        type: choice
-        options: ["NO", "YES"]
 permissions:
   contents: read
   actions: read
 jobs:
   prepare:
-    if: inputs.cod_confirmed == 'YES'
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -20,27 +18,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Download latest successful Pakistan Product Discovery result
+      - name: Download product discovery result from the triggering run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          DISCOVERY_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
-          echo "Finding the latest successful Product Discovery run..."
-          RUN_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/product_discovery.yml/runs?status=completed&per_page=20" --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // empty')
+          RUN_ID="$DISCOVERY_RUN_ID"
           if [ -z "$RUN_ID" ]; then
-            echo "No successful Product Discovery run found in the last 20 completed runs."
+            RUN_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/product_discovery.yml/runs?status=completed&per_page=20" --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // empty')
+          fi
+          if [ -z "$RUN_ID" ]; then
+            echo "No successful Product Discovery run found."
             exit 1
           fi
-          echo "Using successful Product Discovery run: $RUN_ID"
+          echo "Downloading Product Discovery run: $RUN_ID"
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name pakistan-product-discovery --dir product_discovery_output
-          if [ ! -f product_discovery_output/selected_product.json ]; then
-            echo "The successful run did not contain selected_product.json in pakistan-product-discovery."
-            exit 1
-          fi
+          test -f product_discovery_output/selected_product.json
       - name: Verify selected Pakistan Shop listing and download original photos
-        env:
-          MARKAZ_COD_CONFIRMED: ${{ inputs.cod_confirmed }}
         run: python agents/prepare_product.py
       - name: Analyze Pakistan demand, competitors and creative examples
         env:
@@ -80,7 +76,7 @@ jobs:
             echo "# Click & Collect — Campaign Review"
             echo
             echo "Review original supplier photos against AI concepts. AI concepts can change product details."
-            echo "The owner confirmed COD for the exact Pakistan Shop product; stock and price can change."
+            echo "COD and checkout availability are NOT verified from the public listing. Check current stock, final price and payment options before approving publication. Captions are instructed not to promise COD."
             echo
             echo "## Market analysis"
             cat market_analysis/market_analysis.md
@@ -95,7 +91,7 @@ jobs:
             cat campaign_media_urls.json
             echo
             echo "## Manual video step"
-            echo "Copy video_prompt_output/video_prompt.txt into your chosen video generator. Upload the finished video using the upload page, then copy its public HTTPS URL into the publishing workflow."
+            echo "Copy video_prompt_output/video_prompt.txt into your chosen video generator. Upload the finished video at the Click & Collect upload page. The watcher checks Cloudinary every five minutes and creates your final approval issue automatically."
           } > campaign_review/REVIEW.md
       - uses: actions/upload-artifact@v4
         with:
