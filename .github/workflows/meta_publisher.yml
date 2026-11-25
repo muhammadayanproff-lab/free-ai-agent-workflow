@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       approval:
-        description: "Choose APPROVE only after reviewing the campaign"
+        description: "Choose APPROVE only after reviewing the campaign artifact"
         required: true
         type: choice
         options: [REJECT, APPROVE]
@@ -13,52 +13,49 @@ on:
         default: "Instagram,Facebook"
         type: choice
         options: ["Instagram,Facebook", "Instagram", "Facebook"]
-      image_url:
-        description: "Public HTTPS URL of the approved image (from campaign artifact/Cloudinary)"
+      image_choice:
+        description: "Which of the three generated images to publish"
         required: true
-        type: string
+        default: "1"
+        type: choice
+        options: ["1", "2", "3"]
       video_url:
-        description: "Upload your finished video to Cloudinary, then paste its public HTTPS URL"
-        required: true
-        type: string
-      ig_image_caption:
-        description: "Instagram image-post caption"
-        required: true
-        type: string
-      fb_image_caption:
-        description: "Facebook image-post caption"
-        required: true
-        type: string
-      ig_video_caption:
-        description: "Instagram Reel caption"
-        required: true
-        type: string
-      fb_video_caption:
-        description: "Facebook video-post caption"
+        description: "Public HTTPS video URL copied from the Cloudinary upload page"
         required: true
         type: string
 permissions:
   contents: read
+  actions: read
 jobs:
   publish:
     if: inputs.approval == 'APPROVE'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Publish image and video separately to selected platforms
+      - name: Download latest approved campaign assets and captions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow campaign_assets.yml --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion == "success")) | .[0].databaseId // empty')
+          if [ -z "$RUN_ID" ]; then
+            echo "No successful campaign-assets run found. Prepare and review a campaign first."
+            exit 1
+          fi
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name click-collect-campaign-review --dir campaign_review
+          test -f campaign_review/campaign_copy/campaign_copy.json
+          test -f campaign_review/campaign_media_urls.json
+      - name: Publish image and video separately with generated captions
         env:
           PUBLISH_APPROVAL: ${{ inputs.approval }}
           TARGET_PLATFORMS: ${{ inputs.platforms }}
-          IMAGE_URL: ${{ inputs.image_url }}
+          IMAGE_CHOICE: ${{ inputs.image_choice }}
           VIDEO_URL: ${{ inputs.video_url }}
-          IG_IMAGE_CAPTION: ${{ inputs.ig_image_caption }}
-          FB_IMAGE_CAPTION: ${{ inputs.fb_image_caption }}
-          IG_VIDEO_CAPTION: ${{ inputs.ig_video_caption }}
-          FB_VIDEO_CAPTION: ${{ inputs.fb_video_caption }}
+          CAMPAIGN_REVIEW_DIR: campaign_review
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
           META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
           META_IG_USER_ID: ${{ secrets.META_IG_USER_ID }}

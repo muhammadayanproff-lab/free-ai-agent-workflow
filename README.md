@@ -12,7 +12,7 @@ The repository now centers on Pakistani product discovery, public Markaz Pakista
 6. **Image Analysis & Video Prompt Agent** analyzes original product photos and creates exactly one copy-ready 10–15 second, 9:16 video prompt.
 7. **Manual video upload**: use the upload page at `/upload-video.html` after it is deployed. Upload your externally generated video to Cloudinary and copy its public HTTPS URL.
 8. **SEO & Caption Agent** creates four separate captions: Instagram image, Facebook image, Instagram Reel and Facebook video.
-9. **Approval & Publishing**: choose APPROVE only after reviewing everything. The publisher creates separate image and video posts on the selected Meta platforms, using the platform-specific captions.
+9. **Approval & Publishing**: choose APPROVE only after reviewing everything. The publishing workflow automatically downloads the latest campaign captions and image URLs; you only select which generated image, paste the uploaded video URL, select platforms and choose APPROVE.
 
 ## Required GitHub Actions secrets
 
@@ -31,7 +31,7 @@ Optional variable: `META_GRAPH_API_VERSION` (default `v27.0`).
 ## One-time video upload setup
 
 1. In Cloudinary, create an **unsigned upload preset** restricted to MP4/MOV/WEBM, a sensible file-size limit, and folder `click-and-collect/manual-videos`.
-2. The Deploy video upload page workflow attempts to enable GitHub Pages and deploy `docs/`.
+2. In repository Settings → Pages, select **GitHub Actions** as the build source. The GitHub Actions integration cannot enable Pages on this repository until you do this one-time setting.
 3. After successful deployment, open `https://muhammadayanproff-lab.github.io/free-ai-agent-workflow/upload-video.html`.
 4. Enter the unsigned preset name on the page and upload your video. Never put your Cloudinary API secret in the page.
 

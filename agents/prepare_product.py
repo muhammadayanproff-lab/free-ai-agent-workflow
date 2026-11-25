@@ -86,6 +86,8 @@ def main():
     offers = product.get("offers", {})
     if isinstance(offers, list):
         offers = offers[0] if offers else {}
+    if not isinstance(offers, dict):
+        offers = {}
     images = product.get("image", [])
     if isinstance(images, str):
         images = [images]

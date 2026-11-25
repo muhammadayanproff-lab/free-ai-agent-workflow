@@ -27,7 +27,7 @@ class RepositoryIntegrityTests(unittest.TestCase):
     def test_meta_requires_explicit_approval_and_four_captions(self):
         source = (ROOT / "agents" / "meta_publisher.py").read_text(encoding="utf-8")
         self.assertIn('required("PUBLISH_APPROVAL")!="APPROVE"', source)
-        for key in ("IG_IMAGE_CAPTION", "FB_IMAGE_CAPTION", "IG_VIDEO_CAPTION", "FB_VIDEO_CAPTION"):
+        for key in ("instagram_image_caption", "facebook_image_caption", "instagram_video_caption", "facebook_video_caption"):
             self.assertIn(key, source)
 
     def test_video_generation_removed_prompt_agent_present(self):
