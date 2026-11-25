@@ -2,11 +2,35 @@ name: Pakistan Product Discovery
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * 1,4"
+    - cron: "0 9 * * *"
 permissions:
   contents: read
 jobs:
+  schedule_guard:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.guard.outputs.should_run }}
+    steps:
+      - id: guard
+        name: Run on alternate Pakistan calendar days at 2 PM
+        shell: bash
+        run: |
+          python - <<'PY'
+          from datetime import date, datetime
+          from zoneinfo import ZoneInfo
+          import os
+          today = datetime.now(ZoneInfo("Asia/Karachi")).date()
+          anchor = date(2026, 11, 26)
+          days = (today - anchor).days
+          should_run = days >= 0 and days % 2 == 0
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"should_run={'true' if should_run else 'false'}\\n")
+          print(f"Pakistan date: {today}; scheduled run: {should_run}")
+          PY
   discover:
+    needs: schedule_guard
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.schedule_guard.outputs.should_run == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
