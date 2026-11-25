@@ -25,14 +25,19 @@ jobs:
         run: |
           set -euo pipefail
           ISSUE_BODY=$(gh issue view "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
-          CAMPAIGN_RUN_ID=$(printf '%s\\n' "$ISSUE_BODY" | sed -n 's/.*<!-- campaign_run_id=\\([0-9][0-9]*\\) -->.*/\\1/p')
-          VIDEO_URL=$(printf '%s\\n' "$ISSUE_BODY" | sed -n 's/.*<!-- video_url=\\(https:\\/\\/[^ ]*\\) -->.*/\\1/p')
-          if ! [[ "$CAMPAIGN_RUN_ID" =~ ^[0-9]+$ ]] || ! [[ "$VIDEO_URL" =~ ^https:// ]]; then
-            echo "Approval issue is missing a valid campaign run ID or HTTPS video URL."
-            exit 1
-          fi
-          echo "campaign_run_id=$CAMPAIGN_RUN_ID" >> "$GITHUB_OUTPUT"
-          echo "video_url=$VIDEO_URL" >> "$GITHUB_OUTPUT"
+          export ISSUE_BODY
+          python - <<'PY'
+          import os
+          import re
+          body = os.environ["ISSUE_BODY"]
+          run = re.search(r"<!-- campaign_run_id=(\\d+) -->", body)
+          video = re.search(r"<!-- video_url=(https://[^ ]+) -->", body)
+          if not run or not video:
+              raise SystemExit("Approval issue is missing a valid campaign run ID or HTTPS video URL.")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"campaign_run_id={run.group(1)}\\n")
+              output.write(f"video_url={video.group(1)}\\n")
+          PY
       - name: Download exact campaign review artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
