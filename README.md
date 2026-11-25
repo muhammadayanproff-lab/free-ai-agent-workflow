@@ -1,31 +1,28 @@
 # Click & Collect — Pakistan Product Research and Social Campaign Workflow
 
-This repository is being reworked around product discovery, Markaz Pakistan catalogue verification, creative assets, a manually generated video, review and explicit Meta publishing approval.
+The repository is being reworked around Pakistan product discovery, Markaz Pakistan catalogue verification, image concepts, a manually generated video, review and explicit Meta publishing approval.
 
-## New intended process
+## Intended end-to-end process
 
-1. **Pakistan Product Discovery** reads the owner's Markaz Pakistan Shop export, collects public Pakistan market signals (Google Trends RSS and Google News RSS), and ranks only products actually present in that export.
-2. **Markaz verification** uses the official Pakistan catalogue export as the product source. The exact product's current availability, variant, price and COD checkout still need final confirmation in Markaz before it is approved for campaign production.
-3. **Market and creative analysis** checks the product's problem-solution fit, public demand evidence, risks and competing creative patterns. Search interest is not actual sales data.
-4. **Image creation** creates a small set of concept creatives. Original Markaz supplier images must remain in the campaign package for product-fidelity checks; generated images may alter product details and must be reviewed.
-5. **Image analysis & video prompt** analyzes the product photos and produces exactly one copy-ready prompt for a 10–15 second 9:16 promotional video. This repository no longer renders videos.
-6. **Manual video upload**: create the video with your chosen external tool, upload it to Cloudinary, and paste its public HTTPS URL into the final publishing workflow.
-7. **SEO & captions**: create separate SEO-aware captions for the image post and video/Reel post, each adapted to Instagram and Facebook.
-8. **Approval & publishing**: only the explicit APPROVE choice can publish. The publisher submits separate image and video posts, each with its own caption, to the selected Meta platforms.
+1. **Pakistan Product Discovery** reads the owner's Markaz Pakistan Shop export, collects public Pakistan market signals (Google Trends RSS and Google News RSS), and ranks only products present in that export.
+2. **Markaz product check**: the owner confirms the exact selected SKU is in Markaz Pakistan Shop and that COD is offered at checkout. The pipeline blocks campaign preparation unless this confirmation is explicitly supplied.
+3. **Market analysis** evaluates problem-solution fit, public demand evidence, competitors, creative angles, risks and a conservative test recommendation.
+4. **Image Creator** generates three AI concept creatives. Original Markaz supplier images are retained separately for product-fidelity review; AI concepts may alter product details.
+5. **Image Analysis & Video Prompt Agent** analyzes original product photos and produces exactly one copy-ready 10–15 second, 9:16 video prompt.
+6. **Manual video upload**: use the upload page at `/upload-video.html` after GitHub Pages is enabled. Upload your externally generated video to Cloudinary and copy its public HTTPS URL.
+7. **SEO & Caption Agent** generates separate Instagram and Facebook captions for the image post and video post (four captions total).
+8. **Approval & Publishing**: choose APPROVE only after review. The publisher submits separate image and video posts to the selected Meta platforms with platform-specific captions.
 
-## Markaz Pakistan catalogue input
+## Markaz catalogue input
 
-Use Markaz's **Export to My Store** feature after selecting/favouriting products in the Pakistan Shop tab. Export Shopify CSV, WooCommerce CSV or Excel, convert Excel to CSV if necessary, then commit the file as:
+Use Markaz **Export to My Store** after selecting/favouriting products from the Pakistan Shop tab. Export Shopify CSV, WooCommerce CSV or Excel; convert Excel to CSV if necessary. Commit the file as `catalog/markaz_pakistan_export.csv`.
 
-`catalog/markaz_pakistan_export.csv`
+The CSV should include product title, variant SKU, PKR price and image URL columns. Rows with clear China/prepaid indicators are filtered. The file must come from Pakistan Shop, not Markaz China. Keep this public repository free of private information; consider making it private before committing supplier/reseller data.
 
-The research workflow expects product title, variant SKU, PKR price and image URL columns. It excludes obvious China/prepaid rows. Never export from Markaz China for this pipeline. The file can contain private reseller pricing, so keep the repository private if you do not want that data public.
+Markaz's published Export to My Store instructions say exports include images, variants, descriptions and prices, support CSV/Excel, and allow up to 50 products per export. The agent does not log in to Markaz or use passwords/session cookies.
 
-Markaz documents that its export includes product images, variants, descriptions and prices, supports CSV/Excel, and allows up to 50 products per export. The exporter is an authenticated owner action; the agent does not log into Markaz or use your password.
+## Required GitHub Actions secrets
 
-## Secrets
-
-Repository secrets (never paste these into code or chat):
 - `GEMINI_API_KEY`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
@@ -36,17 +33,24 @@ Repository secrets (never paste these into code or chat):
 - `META_PAGE_ID`
 - `META_IG_USER_ID`
 
-Optional variable: `META_GRAPH_API_VERSION` (defaults to `v27.0`).
+Optional variable: `META_GRAPH_API_VERSION` (default `v27.0`).
 
-## Important limits
+## One-time video upload setup
 
-- “Entire internet” cannot be exhaustively searched. The researcher uses selected public, accessible sources and records source URLs/dates; search/news trends are only demand signals, not verified sales.
-- A Markaz export is a snapshot, not a live stock guarantee. Check the exact Pakistan product page and COD option before moving a product forward. The system does not access private Markaz sessions or bypass access controls.
-- Generated images are creative concepts, not guaranteed exact supplier photos. Preserve the original product photos and review every generated image.
-- No automatic video rendering is included. The system writes one prompt; you generate the video externally and provide its public HTTPS URL.
-- Meta publishing creates four posts when both platforms are selected: image and video on Instagram, and image and video on Facebook. Captions are separate. A successful workflow run is required to confirm publication.
-- GitHub Actions, Gemini, Cloudflare, Cloudinary and Meta have independent quotas and terms. Unlimited free use is not guaranteed.
+1. In Cloudinary, create an **unsigned upload preset** restricted to video formats (MP4/MOV/WEBM), a sensible size limit, and folder `click-and-collect/manual-videos`.
+2. In GitHub repository Settings → Pages, choose **GitHub Actions** as the build/deploy source.
+3. Run the **Deploy video upload page** workflow once. The page will be available at `https://muhammadayanproff-lab.github.io/free-ai-agent-workflow/upload-video.html`.
+4. Enter the unsigned preset name on the page when uploading. Do not put your Cloudinary API secret in the page.
+
+## Honest limitations
+
+- “Entire internet” cannot be exhaustively searched. Research uses selected public accessible sources and cites URLs/dates. Search/news interest is not verified orders or sales.
+- A Markaz export is a snapshot, not live inventory. COD must be checked on the exact Pakistan listing/checkout by the owner; there is no verified public product-level API connection in this repository.
+- Generated image concepts are not guaranteed to match the exact supplier product. Always compare them with the original Markaz photos.
+- This repository does not render video. It writes one prompt; the owner creates the video externally and uploads it through the Cloudinary upload page.
+- With both platforms selected, publishing creates four separate posts: Instagram image, Instagram Reel, Facebook image and Facebook video. Each has its own caption.
+- GitHub Actions, Gemini, Cloudflare, Cloudinary and Meta have independent quotas/terms. Unlimited free usage is not guaranteed.
 
 ## Validation
 
-CI checks Python syntax, workflow YAML and repository contracts. A green CI run does not validate live third-party credentials, Markaz stock/COD, image quality or Meta publishing.
+CI compiles Python and tests repository contracts/workflow YAML. A green CI run does not verify third-party credentials, Markaz stock/COD, image quality or Meta publication.

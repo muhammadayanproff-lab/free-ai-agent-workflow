@@ -1,10 +1,9 @@
 name: Approved Image and Video Publishing
-
 on:
   workflow_dispatch:
     inputs:
       approval:
-        description: "Choose APPROVE only after checking the complete campaign"
+        description: "Choose APPROVE only after reviewing the campaign"
         required: true
         type: choice
         options: [REJECT, APPROVE]
@@ -15,43 +14,51 @@ on:
         type: choice
         options: ["Instagram,Facebook", "Instagram", "Facebook"]
       image_url:
-        description: "Public HTTPS URL of the approved campaign image"
+        description: "Public HTTPS URL of the approved image (from campaign artifact/Cloudinary)"
         required: true
         type: string
       video_url:
-        description: "Public HTTPS URL of your manually generated video (upload to Cloudinary first)"
+        description: "Upload your finished video to Cloudinary, then paste its public HTTPS URL"
         required: true
         type: string
-      image_caption:
-        description: "Final approved image-post caption"
+      ig_image_caption:
+        description: "Instagram image-post caption"
         required: true
         type: string
-      video_caption:
-        description: "Final approved video/Reel caption"
+      fb_image_caption:
+        description: "Facebook image-post caption"
         required: true
         type: string
-
+      ig_video_caption:
+        description: "Instagram Reel caption"
+        required: true
+        type: string
+      fb_video_caption:
+        description: "Facebook video-post caption"
+        required: true
+        type: string
 permissions:
   contents: read
-
 jobs:
   publish:
     if: inputs.approval == 'APPROVE'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Publish separate image and video posts with separate captions
+      - name: Publish image and video separately to selected platforms
         env:
           PUBLISH_APPROVAL: ${{ inputs.approval }}
           TARGET_PLATFORMS: ${{ inputs.platforms }}
           IMAGE_URL: ${{ inputs.image_url }}
           VIDEO_URL: ${{ inputs.video_url }}
-          IMAGE_CAPTION: ${{ inputs.image_caption }}
-          VIDEO_CAPTION: ${{ inputs.video_caption }}
+          IG_IMAGE_CAPTION: ${{ inputs.ig_image_caption }}
+          FB_IMAGE_CAPTION: ${{ inputs.fb_image_caption }}
+          IG_VIDEO_CAPTION: ${{ inputs.ig_video_caption }}
+          FB_VIDEO_CAPTION: ${{ inputs.fb_video_caption }}
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
           META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
           META_IG_USER_ID: ${{ secrets.META_IG_USER_ID }}

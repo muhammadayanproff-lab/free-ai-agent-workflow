@@ -61,7 +61,7 @@ def main():
     out=Path("generated_images"); out.mkdir(exist_ok=True)
     (out/"image_prompts.json").write_text(json.dumps(prompts,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     for index,prompt in enumerate(prompts,1):
-        path=out/f"concept_{index:02d}.png"
+        path=out/f"concept_{index:02d}.jpg"
         generate(prompt,path)
         print("Generated",path)
     print("Three AI concept creatives generated. Original Markaz images remain separately preserved.")

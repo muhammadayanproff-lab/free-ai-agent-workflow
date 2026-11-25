@@ -24,15 +24,18 @@ class RepositoryIntegrityTests(unittest.TestCase):
         for name in ("README.md", "requirements.txt", ".gitignore"):
             self.assertTrue((ROOT / name).is_file())
 
-    def test_meta_requires_explicit_approval_and_separate_posts(self):
+    def test_meta_requires_explicit_approval_and_four_captions(self):
         source = (ROOT / "agents" / "meta_publisher.py").read_text(encoding="utf-8")
-        self.assertIn('required("PUBLISH_APPROVAL") != "APPROVE"', source)
-        self.assertIn("IMAGE_CAPTION", source)
-        self.assertIn("VIDEO_CAPTION", source)
+        self.assertIn('required("PUBLISH_APPROVAL")!="APPROVE"', source)
+        for key in ("IG_IMAGE_CAPTION", "FB_IMAGE_CAPTION", "IG_VIDEO_CAPTION", "FB_VIDEO_CAPTION"):
+            self.assertIn(key, source)
 
     def test_video_generation_removed_prompt_agent_present(self):
         self.assertTrue((ROOT / "agents" / "video_prompt_agent.py").is_file())
         self.assertFalse((ROOT / "agents" / "video_creator.py").exists())
+
+    def test_manual_video_upload_page_present(self):
+        self.assertTrue((ROOT / "docs" / "upload-video.html").is_file())
 
 if __name__ == "__main__":
     unittest.main()
