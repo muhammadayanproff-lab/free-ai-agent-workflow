@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-3.8-flash")
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ClickCollectMarketAnalysis/2.0)"}
 
 def rss(url, source, limit=18):
