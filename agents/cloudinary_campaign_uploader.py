@@ -3,6 +3,7 @@ import json
 import os
 import time
 import urllib.request
+import urllib.error
 import uuid
 from pathlib import Path
 
@@ -22,8 +23,26 @@ def upload(path, cloud, key, secret):
     request = urllib.request.Request(
         f"https://api.cloudinary.com/v1_1/{cloud}/image/upload",
         data=bytes(body), headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, method="POST")
-    with urllib.request.urlopen(request, timeout=180) as response:
-        result = json.loads(response.read().decode())
+    result = None
+    last_error = ""
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                result = json.loads(response.read().decode())
+            break
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")
+            last_error = f"Cloudinary HTTP {exc.code}: {detail[:600]}"
+            if exc.code not in (408, 429, 500, 502, 503, 504) or attempt == 3:
+                raise RuntimeError(last_error) from exc
+            time.sleep(8 * (attempt + 1))
+        except (TimeoutError, OSError) as exc:
+            last_error = f"Cloudinary network/timeout: {exc}"
+            if attempt == 3:
+                raise RuntimeError(last_error) from exc
+            time.sleep(8 * (attempt + 1))
+    if result is None:
+        raise RuntimeError(last_error or "Cloudinary returned no response.")
     url = result.get("secure_url")
     if not url or not url.startswith("https://"):
         raise RuntimeError("Cloudinary did not return a public HTTPS image URL.")
