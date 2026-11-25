@@ -51,7 +51,7 @@ def read_markaz_catalog():
         sample = f.read(4096)
         f.seek(0)
         try:
-            dialect = csv.Sniffer().sniff(sample, delimiters=",;\\t")
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
         except csv.Error:
             dialect = csv.excel
         for row in csv.DictReader(f, dialect=dialect):

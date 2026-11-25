@@ -1,99 +1,57 @@
-name: Approved Meta Social Publishing
+name: Approved Image and Video Publishing
 
 on:
   workflow_dispatch:
     inputs:
       approval:
-        description: "Only choose APPROVE after reviewing the campaign package"
+        description: "Choose APPROVE only after checking the complete campaign"
         required: true
         type: choice
-        options:
-          - REJECT
-          - APPROVE
-      caption:
-        description: "Final approved caption (include hashtags)"
-        required: true
-        type: string
+        options: [REJECT, APPROVE]
       platforms:
-        description: "Where to publish"
+        description: "Publish both separate posts to"
         required: true
         default: "Instagram,Facebook"
         type: choice
-        options:
-          - "Instagram,Facebook"
-          - "Instagram"
-          - "Facebook"
-      media_type:
-        description: "Media type for Instagram"
+        options: ["Instagram,Facebook", "Instagram", "Facebook"]
+      image_url:
+        description: "Public HTTPS URL of the approved campaign image"
         required: true
-        default: "image"
-        type: choice
-        options:
-          - "image"
-          - "video"
-      media_url:
-        description: "Optional. Leave blank to automatically use the latest generated image or video."
-        required: false
         type: string
-      product_url:
-        description: "Optional Click and Collect product page URL for Facebook"
-        required: false
+      video_url:
+        description: "Public HTTPS URL of your manually generated video (upload to Cloudinary first)"
+        required: true
+        type: string
+      image_caption:
+        description: "Final approved image-post caption"
+        required: true
+        type: string
+      video_caption:
+        description: "Final approved video/Reel caption"
+        required: true
         type: string
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   publish:
     if: inputs.approval == 'APPROVE'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Get latest generated media URL
-        id: latest_media
-        if: inputs.media_url == ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MEDIA_TYPE: ${{ inputs.media_type }}
-        run: |
-          if [ "$MEDIA_TYPE" = "image" ]; then
-            WORKFLOW_FILE="image_creator.yml"
-            ARTIFACT_NAME="ai-generated-image-and-url"
-            URL_FILE="media_output/image_url.txt"
-            DOWNLOAD_DIR="downloaded-media"
-          else
-            WORKFLOW_FILE="video_creator.yml"
-            ARTIFACT_NAME="product-promo-video"
-            URL_FILE="generated_videos/video_url.txt"
-            DOWNLOAD_DIR="downloaded-media"
-          fi
-          RUN_ID=$(gh run list --workflow "$WORKFLOW_FILE" --status success --limit 1 --json databaseId --jq '.[0].databaseId')
-          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
-            echo "No successful media creation run found. Run the relevant creator first or provide a media URL."
-            exit 1
-          fi
-          gh run download "$RUN_ID" --name "$ARTIFACT_NAME" --dir "$DOWNLOAD_DIR"
-          URL=$(cat "$DOWNLOAD_DIR/$URL_FILE")
-          if [ -z "$URL" ]; then
-            echo "The generated public media URL file was empty."
-            exit 1
-          fi
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
-      - name: Publish only after explicit approval
+      - name: Publish separate image and video posts with separate captions
         env:
           PUBLISH_APPROVAL: ${{ inputs.approval }}
-          POST_CAPTION: ${{ inputs.caption }}
           TARGET_PLATFORMS: ${{ inputs.platforms }}
-          MEDIA_TYPE: ${{ inputs.media_type }}
-          MEDIA_URL: ${{ inputs.media_url || steps.latest_media.outputs.url }}
-          PRODUCT_URL: ${{ inputs.product_url }}
+          IMAGE_URL: ${{ inputs.image_url }}
+          VIDEO_URL: ${{ inputs.video_url }}
+          IMAGE_CAPTION: ${{ inputs.image_caption }}
+          VIDEO_CAPTION: ${{ inputs.video_caption }}
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
           META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
           META_IG_USER_ID: ${{ secrets.META_IG_USER_ID }}
