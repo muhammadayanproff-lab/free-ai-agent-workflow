@@ -54,7 +54,11 @@ The single prompt must preserve the exact product identity, silhouette, proporti
         answer="\n".join(x.get("text","") for x in parts if x.get("text")).strip()
     else:
         answer = groq_chat(parts[0]["text"], max_tokens=3500, image_paths=image_paths) or ""
-    if "ONE FINAL VIDEO PROMPT" not in answer.upper() or len(answer)<250: raise RuntimeError("Gemini and Groq did not return the required single video prompt. Groq vision requires an active image-capable model and valid API key.")
+    if "ONE FINAL VIDEO PROMPT" not in answer.upper() or len(answer)<250:
+        print("Gemini response did not meet the required format; retrying with Groq vision.")
+        answer = groq_chat(parts[0]["text"], max_tokens=3500, image_paths=image_paths) or ""
+    if "ONE FINAL VIDEO PROMPT" not in answer.upper() or len(answer)<250:
+        raise RuntimeError("Gemini and Groq did not return the required single video prompt. Groq vision requires an active image-capable model and valid API key.")
     return answer
 
 def main():
