@@ -25,7 +25,7 @@ def main():
     run_id = os.environ["CAMPAIGN_RUN_ID"].strip()
     run_started = parse_time(os.environ["CAMPAIGN_RUN_STARTED_AT"].strip())
 
-    query = urllib.parse.urlencode({"max_results": "100"})
+    query = urllib.parse.urlencode({"max_results": "100", "tags": "true"})
     url = f"https://api.cloudinary.com/v1_1/{cloud}/resources/video/upload?{query}"
     credentials = base64.b64encode(f"{key}:{secret}".encode()).decode()
     request = urllib.request.Request(url, headers={"Authorization": f"Basic {credentials}"})
