@@ -1,18 +1,30 @@
-# Click & Collect — Pakistan Product Research and Social Campaign Workflow
+# Click & Collect — Automated Pakistan Product-to-Social Campaign
 
-The repository now centers on Pakistani product discovery, public Markaz Pakistan Shop verification, market analysis, image concepts, one manually generated video prompt, manual video upload, campaign review and explicit Meta publishing approval.
+The pipeline is scheduled and chained. You do not need to manually start each GitHub Actions workflow.
 
-## End-to-end workflow
+## Automatic schedule and handoffs
 
-1. **Pakistan Product Discovery** crawls public product cards from Markaz Pakistan Shop category pages (never Markaz China), collects Pakistan Google Trends and News RSS, and uses Gemini Google Search grounding to research Pakistani demand, customer problems, competitor products and publicly indexed creative examples.
-2. **Product selection** ranks only products found in the live Markaz Pakistan Shop crawl. The report includes the exact public product URL, listed price, category, images, stock label (if shown), and evidence/risks.
-3. **Automatic handoff & Markaz COD gate**: the Campaign Assets workflow automatically downloads the latest selected product from the discovery artifact. You only confirm that you opened this exact item in Pakistan Shop and COD is available at checkout; campaign preparation is blocked unless you confirm.
-4. **Market Analysis Agent** searches for product demand, reviews, competitor products and creative examples; it distinguishes evidence from hypotheses and does not invent sales or ROAS.
-5. **Image Creator** generates three AI concept creatives. Original Markaz supplier images are downloaded and preserved separately for product-fidelity review; generated images may alter product details.
-6. **Image Analysis & Video Prompt Agent** analyzes original product photos and creates exactly one copy-ready 10–15 second, 9:16 video prompt.
-7. **Manual video upload**: use the upload page at `/upload-video.html` after it is deployed. Upload your externally generated video to Cloudinary and copy its public HTTPS URL.
-8. **SEO & Caption Agent** creates four separate captions: Instagram image, Facebook image, Instagram Reel and Facebook video.
-9. **Approval & Publishing**: choose APPROVE only after reviewing everything. The publishing workflow automatically downloads the latest campaign captions and image URLs; you select an AI concept or original supplier photo, paste the uploaded video URL, select platforms and choose APPROVE.
+1. **Every other day at 2:00 PM Pakistan time**, Product Discovery runs automatically. GitHub schedules a daily check at 09:00 UTC; a Pakistan-time date guard allows every second day, anchored on 26 November 2026.
+2. When Product Discovery succeeds, **Campaign Assets starts automatically**. It verifies the public Markaz Pakistan Shop listing, downloads original photos, researches the market, creates three AI image concepts, generates one 10–15 second video prompt, writes SEO and four platform-specific captions, and uploads the images to Cloudinary.
+3. The process pauses for your one manual creative task: copy the generated video prompt into your chosen video generator, create the video, and upload it at the upload page:
+   https://muhammadayanproff-lab.github.io/free-ai-agent-workflow/upload-video.html
+4. A background GitHub workflow checks the Cloudinary video folder every five minutes. When it detects a video uploaded after the latest campaign, it creates a final approval issue and attaches a combined review artifact. You do not need to copy a URL or run another workflow.
+5. Review the original supplier image, AI concepts, video, SEO and captions. Also verify current product stock, final price and COD/payment availability at checkout. When ready, comment exactly **APPROVE** on the approval issue.
+6. The approval comment automatically publishes the selected AI image concept and uploaded video as four separate posts: Instagram image, Instagram Reel, Facebook image and Facebook video. Each post uses its own generated caption. The workflow then posts a receipt and closes the approval issue.
+
+## What still requires you
+
+- Generate the video externally from the supplied prompt and upload it on the upload page.
+- Give the final approval by commenting **APPROVE** on the campaign approval issue.
+
+## Important verification limits
+
+- Markaz's private checkout is not accessible through the public product listing. The automation does not claim COD is verified and instructs the copywriter not to promise COD or unverified payment/delivery terms. Check stock, final price and payment options before approval.
+- Public Markaz Shop pages are snapshots. Stock and price can change.
+- AI image concepts may change product details. Compare them with the original supplier photos before approval.
+- The researcher uses public category pages, Google Search grounding, Google Trends RSS and Google News RSS; it cannot exhaustively search the entire internet or private social analytics.
+- Video rendering remains external; this repository creates the prompt and automatically handles the uploaded result afterwards.
+- Publishing requires the existing Meta secrets and appropriate Instagram/Facebook permissions. GitHub Actions, Gemini, Cloudflare, Cloudinary and Meta have independent quotas/terms; unlimited free use is not guaranteed.
 
 ## Required GitHub Actions secrets
 
@@ -28,22 +40,13 @@ The repository now centers on Pakistani product discovery, public Markaz Pakista
 
 Optional variable: `META_GRAPH_API_VERSION` (default `v27.0`).
 
-## One-time video upload setup
+## One-time setup already used by this project
 
-1. In GitHub Actions, run **Configure Cloudinary Video Upload** once. It creates or updates the unsigned preset `click_collect_manual_video`, restricts formats to MP4/MOV/WEBM, and sets the destination folder. The page enforces a 100 MB browser-side limit; Cloudinary presets do not provide a per-preset file-size cap.
-2. In repository Settings → Pages, select **GitHub Actions** as the build source. The GitHub Actions integration cannot enable Pages on this repository until you do this one-time setting.
-3. After successful deployment, open `https://muhammadayanproff-lab.github.io/free-ai-agent-workflow/upload-video.html`.
-4. Enter the unsigned preset name on the page and upload your video. Never put your Cloudinary API secret in the page.
-
-## Honest limitations
-
-- “Entire internet” cannot be exhaustively searched. The researcher uses public category pages, Google Search grounding, Google Trends RSS and Google News RSS; private social analytics, actual orders and ad-account metrics are not available.
-- Public Markaz Shop pages are a snapshot. Stock and price can change. Confirm the exact product's COD checkout before campaign creation.
-- Generated image concepts are not guaranteed to match the exact supplier product. Original product photos remain in the artifact for comparison.
-- This repository does not render videos. It creates one prompt; you generate the video externally and upload it using the Cloudinary upload page.
-- When both platforms are selected, publishing creates four posts: Instagram image, Instagram Reel, Facebook image and Facebook video. Each has its own caption.
-- GitHub Actions, Gemini, Cloudflare, Cloudinary and Meta have independent quotas/terms. Unlimited free use is not guaranteed.
+- Configure the restricted unsigned Cloudinary video preset `click_collect_manual_video` once.
+- GitHub Pages must use **GitHub Actions** as its build source for the upload page.
+- The Cloudinary upload page enforces a 100 MB browser-side limit. The preset does not enforce a server-side per-preset size cap.
+- GitHub Actions schedule events can be delayed by GitHub; 2:00 PM Pakistan time is the requested schedule, not a guaranteed exact start second.
 
 ## Validation
 
-CI compiles Python and tests repository contracts/workflow YAML. A green CI run does not verify external API access, Markaz stock/COD, image fidelity or Meta publication.
+CI compiles Python and tests repository contracts/workflow YAML. A green CI run does not verify external API access, Markaz stock/COD, image fidelity or successful Meta publication.
