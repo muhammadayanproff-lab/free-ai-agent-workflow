@@ -30,13 +30,13 @@ jobs:
           import os
           import re
           body = os.environ["ISSUE_BODY"]
-          run = re.search(r"<!-- campaign_run_id=(\\d+) -->", body)
+          run = re.search(r"<!-- campaign_run_id=(\d+) -->", body)
           video = re.search(r"<!-- video_url=(https://[^ ]+) -->", body)
           if not run or not video:
               raise SystemExit("Approval issue is missing a valid campaign run ID or HTTPS video URL.")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"campaign_run_id={run.group(1)}\\n")
-              output.write(f"video_url={video.group(1)}\\n")
+              output.write(f"campaign_run_id={run.group(1)}\n")
+              output.write(f"video_url={video.group(1)}\n")
           PY
       - name: Download exact campaign review artifact
         env:
