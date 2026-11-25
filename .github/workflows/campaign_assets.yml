@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 jobs:
   prepare:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
@@ -99,3 +100,35 @@ jobs:
           path: campaign_review/
           if-no-files-found: error
           retention-days: 30
+      - name: Notify owner that the video prompt is ready
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: \${{ github.repository }}
+          GITHUB_RUN_ID: \${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="Video prompt ready: campaign run $GITHUB_RUN_ID"
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 100 --json title --jq "map(select(.title == \\"$TITLE\\")) | length")
+          if [ "$EXISTING" = "0" ]; then
+            {
+              echo "# Your product video prompt is ready"
+              echo
+              echo "Copy the prompt below into your video generator. When the video is ready, upload it here:"
+              echo "https://muhammadayanproff-lab.github.io/free-ai-agent-workflow/upload-video.html"
+              echo
+              echo "## Video prompt"
+              echo
+              echo '~~~text'
+              cat video_prompt_output/video_prompt.txt
+              echo
+              echo '~~~'
+              echo
+              echo "## Full campaign review"
+              echo "Download the campaign artifact from https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              echo
+              echo "After upload, Cloudinary is checked automatically and a separate final approval issue will be created."
+            } > video_prompt_notice.md
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file video_prompt_notice.md
+          else
+            echo "Video prompt notification already exists for this campaign."
+          fi
