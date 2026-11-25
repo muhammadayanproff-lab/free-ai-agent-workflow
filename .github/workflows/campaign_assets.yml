@@ -19,6 +19,14 @@ on:
         description: "Optional current PKR price copied from the discovery report if page extraction is unavailable"
         required: false
         type: string
+      product_title:
+        description: "Optional exact title from the discovery report, used only if Markaz page fetch fails"
+        required: false
+        type: string
+      product_image_url:
+        description: "Optional main product image URL from the discovery report, used only if page fetch fails"
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -36,6 +44,8 @@ jobs:
           PRODUCT_URL: ${{ inputs.product_url }}
           PRODUCT_CATEGORY: ${{ inputs.product_category }}
           PRODUCT_PRICE: ${{ inputs.product_price }}
+          PRODUCT_TITLE: ${{ inputs.product_title }}
+          PRODUCT_IMAGE_URL: ${{ inputs.product_image_url }}
           MARKAZ_COD_CONFIRMED: ${{ inputs.cod_confirmed }}
         run: python agents/prepare_product.py
       - name: Analyze Pakistan demand, competitor products and creative examples

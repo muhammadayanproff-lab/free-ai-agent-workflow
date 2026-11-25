@@ -292,7 +292,7 @@ def main():
         lines += ["## Recommended product — verify exact COD before campaign", "",
                   f"- **{selected['title']}**", f"- Markaz product ID: {selected['product_id']}",
                   f"- Listed price: PKR {selected['price_pkr']}", f"- Category: {selected['category']}",
-                  f"- Product page: {selected['product_url']}", f"- Opportunity score: {a.get('score')}/10",
+                  f"- Product page: {selected['product_url']}", f"- Main product image: {(selected.get('image_urls') or ['Not shown'])[0]}", f"- Opportunity score: {a.get('score')}/10",
                   f"- Problem solved: {a.get('problem_solved')}", f"- Buyer: {a.get('buyer')}",
                   f"- Creative angle: {a.get('creative_angle')}", f"- COD status: {selected['cod_status']}", "",
                   "### Evidence", a.get("evidence_summary", ""), "",

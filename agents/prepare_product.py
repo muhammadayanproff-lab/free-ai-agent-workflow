@@ -9,6 +9,8 @@ from pathlib import Path
 PRODUCT_URL = os.getenv("PRODUCT_URL", "").strip()
 COD_CONFIRMED = os.getenv("MARKAZ_COD_CONFIRMED", "").strip().upper() == "YES"
 PRICE_OVERRIDE = os.getenv("PRODUCT_PRICE", "").strip()
+TITLE_OVERRIDE = os.getenv("PRODUCT_TITLE", "").strip()
+IMAGE_OVERRIDE = os.getenv("PRODUCT_IMAGE_URL", "").strip()
 
 class DetailParser(HTMLParser):
     def __init__(self):
@@ -69,13 +71,19 @@ def main():
         raise RuntimeError("Only public Markaz Pakistan Shop product URLs are accepted; China URLs are blocked.")
 
     request = urllib.request.Request(PRODUCT_URL, headers={"User-Agent": "Mozilla/5.0 (compatible; ClickCollectProductVerifier/1.0)"})
-    with urllib.request.urlopen(request, timeout=45) as response:
-        html = response.read(8_000_001).decode("utf-8", errors="replace")
-    if len(html) >= 8_000_000:
-        raise RuntimeError("Markaz product page exceeded the safety read limit.")
+    try:
+        with urllib.request.urlopen(request, timeout=45) as response:
+            html = response.read(8_000_001).decode("utf-8", errors="replace")
+        if len(html) >= 8_000_000:
+            raise RuntimeError("Markaz product page exceeded the safety read limit.")
+    except Exception as exc:
+        if not (TITLE_OVERRIDE and IMAGE_OVERRIDE.startswith("https://")):
+            raise RuntimeError(f"Could not fetch the Markaz product page ({exc}). If temporarily blocked, provide the title and main image URL from the discovery report.") from exc
+        html = ""
 
     parser = DetailParser()
-    parser.feed(html)
+    if html:
+        parser.feed(html)
     json_products = []
     for raw in parser.json_scripts:
         try:
@@ -93,6 +101,8 @@ def main():
         images = [images]
     images = [urllib.parse.urljoin(PRODUCT_URL, x) for x in images if isinstance(x, str)]
     images.extend(parser.images)
+    if IMAGE_OVERRIDE.startswith("https://"):
+        images.insert(0, IMAGE_OVERRIDE)
     og_image = parser.meta.get("og:image", "")
     if og_image:
         images.insert(0, urllib.parse.urljoin(PRODUCT_URL, og_image))
@@ -101,7 +111,7 @@ def main():
         if image.startswith("https://") and image not in unique_images:
             unique_images.append(image)
 
-    title = product.get("name") or parser.meta.get("og:title") or parser.meta.get("twitter:title", "")
+    title = product.get("name") or parser.meta.get("og:title") or parser.meta.get("twitter:title", "") or TITLE_OVERRIDE
     description = product.get("description") or parser.meta.get("description") or parser.meta.get("og:description", "")
     price = PRICE_OVERRIDE or str(offers.get("price") or parser.meta.get("product:price:amount") or "")
     sku = str(product.get("sku") or re.search(r"/(\d+)$", parsed.path).group(1) if re.search(r"/(\d+)$", parsed.path) else "")

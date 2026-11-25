@@ -125,7 +125,8 @@ def main():
     receipt = {
         "status": "PUBLISHED",
         "platform_results": outcomes,
-        "image_choice": choice,\n        "image_type": selected_image.get("type", ""),
+        "image_choice": choice,
+        "image_type": selected_image.get("type", ""),
         "image_url": image_url,
         "video_url": video_url,
         "captions_loaded_from_campaign_artifact": True,
