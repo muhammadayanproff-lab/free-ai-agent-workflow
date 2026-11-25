@@ -229,7 +229,7 @@ def discover_gemini_text_models():
     # Keep preferred models first, then use the remaining text-capable models
     # exposed to this exact API key. A bounded list avoids wasting runner time.
     ordered = list(dict.fromkeys(preferred + discovered))
-    return ordered[:12]
+    return ordered[:8]
 
 
 def groq_chat_completion(prompt, max_tokens=5000):
@@ -267,7 +267,7 @@ def groq_chat_completion(prompt, max_tokens=5000):
             data=json.dumps(body).encode("utf-8"), headers=headers, method="POST"
         )
         try:
-            with urllib.request.urlopen(request, timeout=90) as response:
+            with urllib.request.urlopen(request, timeout=45) as response:
                 result = json.loads(response.read().decode("utf-8"))
             content = result["choices"][0]["message"]["content"]
             print(f"Open-weight fallback succeeded with Groq model: {model_name}")
@@ -363,7 +363,7 @@ RSS COLLECTION ERRORS:
                 method="POST"
             )
             try:
-                with urllib.request.urlopen(request, timeout=90) as response:
+                with urllib.request.urlopen(request, timeout=45) as response:
                     result = json.loads(response.read().decode("utf-8"))
                 print(f"Gemini product selection succeeded with model: {model_name}")
                 break
@@ -424,7 +424,7 @@ def preflight_gemini_model():
             method="POST"
         )
         try:
-            with urllib.request.urlopen(request, timeout=25) as response:
+            with urllib.request.urlopen(request, timeout=15) as response:
                 result = json.loads(response.read().decode("utf-8"))
             if not result.get("candidates"):
                 raise RuntimeError(f"Gemini preflight on {model_name} returned no candidate response.")
