@@ -25,13 +25,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow product_discovery.yml --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion == "success")) | .[0].databaseId // empty')
+          set -euo pipefail
+          echo "Finding the latest successful Product Discovery run..."
+          RUN_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/product_discovery.yml/runs?status=completed&per_page=20" --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // empty')
           if [ -z "$RUN_ID" ]; then
-            echo "No successful Product Discovery run found. Run Product Discovery first."
+            echo "No successful Product Discovery run found in the last 20 completed runs."
             exit 1
           fi
+          echo "Using successful Product Discovery run: $RUN_ID"
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name pakistan-product-discovery --dir product_discovery_output
-          test -f product_discovery_output/selected_product.json
+          if [ ! -f product_discovery_output/selected_product.json ]; then
+            echo "The successful run did not contain selected_product.json in pakistan-product-discovery."
+            exit 1
+          fi
       - name: Verify selected Pakistan Shop listing and download original photos
         env:
           MARKAZ_COD_CONFIRMED: ${{ inputs.cod_confirmed }}
