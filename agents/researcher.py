@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -240,20 +241,45 @@ GOOGLE TRENDS / NEWS RSS:
 RSS COLLECTION ERRORS:
 {json.dumps(rss_errors,ensure_ascii=False)}
 """
+    # Keep the request compact: the full catalogue can otherwise make Gemini
+    # take too long to start returning response headers.
+    compact_products = [
+        {key: p.get(key, "") for key in ("product_id", "title", "price_pkr", "category", "product_url")}
+        for p in products[:100]
+    ]
+    prompt = prompt.replace(
+        json.dumps(products[:250], ensure_ascii=False),
+        json.dumps(compact_products, ensure_ascii=False)
+    )
     body = {"contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json", "maxOutputTokens": 7000}}
-    request = urllib.request.Request(endpoint, data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY}, method="POST")
-    for attempt in range(5):
+            "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json", "maxOutputTokens": 5000}}
+    payload = json.dumps(body).encode("utf-8")
+    result = None
+    last_error = None
+    # Retry transient API/network timeouts with a fresh request each time.
+    for attempt in range(4):
+        request = urllib.request.Request(endpoint, data=payload,
+            headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY}, method="POST")
         try:
-            with urllib.request.urlopen(request, timeout=180) as response:
-                result = json.loads(response.read().decode())
+            with urllib.request.urlopen(request, timeout=300) as response:
+                result = json.loads(response.read().decode("utf-8"))
             break
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", "replace")
-            if error.code not in (408,429,500,502,503,504) or attempt == 4:
-                raise RuntimeError(f"Gemini product selection failed ({error.code}): {detail[:1000]}")
-            time.sleep(5 * (2 ** attempt))
+            last_error = RuntimeError(f"Gemini product selection failed ({error.code}): {detail[:1000]}")
+            if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 3:
+                raise last_error
+        except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
+            last_error = error
+            if attempt == 3:
+                raise RuntimeError(
+                    f"Gemini product selection timed out after 4 attempts: {error}"
+                ) from error
+        delay = min(15 * (2 ** attempt), 90)
+        print(f"Gemini product selection attempt {attempt + 1} did not complete; retrying in {delay}s.")
+        time.sleep(delay)
+    if result is None:
+        raise RuntimeError(f"Gemini product selection failed after retries: {last_error}")
     text = "\n".join(p.get("text", "") for p in result.get("candidates", [{}])[0].get("content", {}).get("parts", []) if p.get("text")).strip()
     try:
         return json.loads(text)
