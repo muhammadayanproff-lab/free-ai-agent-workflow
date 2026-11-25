@@ -52,8 +52,19 @@ def main():
         raise RuntimeError("Cloudinary preset was not verified as unsigned.")
     settings = verified.get("settings", {})
     allowed = settings.get("allowed_formats", "")
-    if allowed and not set(ALLOWED_FORMATS.split(",")).issubset(set(str(allowed).split(","))):
-        raise RuntimeError(f"Preset allowed_formats verification failed: {allowed}")
+    # Cloudinary may return allowed_formats as either a list or a comma-separated string.
+    if isinstance(allowed, str):
+        actual_formats = {item.strip().lower() for item in allowed.split(",") if item.strip()}
+    elif isinstance(allowed, (list, tuple, set)):
+        actual_formats = {str(item).strip().lower() for item in allowed if str(item).strip()}
+    else:
+        actual_formats = set()
+    expected_formats = {item.strip().lower() for item in ALLOWED_FORMATS.split(",")}
+    if not expected_formats.issubset(actual_formats):
+        raise RuntimeError(
+            f"Preset allowed_formats verification failed: expected {sorted(expected_formats)}, "
+            f"received {allowed!r}"
+        )
     print(f"Cloudinary video upload preset {PRESET_NAME} {action} and verified.")
     print("Allowed formats: mp4, mov, webm. Folder: click-and-collect/manual-videos.")
     print("Note: Cloudinary upload presets do not enforce a per-preset file-size cap; the upload page checks 100 MB client-side.")
