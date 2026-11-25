@@ -21,7 +21,7 @@ CATEGORIES = [
     "Office & Stationery", "Toys", "Kids Clothing", "Home & Living",
 ]
 MAX_PAGES = int(os.getenv("MARKAZ_MAX_PAGES_PER_CATEGORY", "2"))
-MAX_PRODUCTS_PER_PAGE = 18
+MAX_PRODUCTS_PER_PAGE = 12
 
 class ListingParser(HTMLParser):
     def __init__(self):
@@ -32,9 +32,11 @@ class ListingParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         href = attrs.get("href", "")
-        if tag == "a" and href.startswith("/shop/product/") and "/china/" not in href:
+        absolute_href = urllib.parse.urljoin(BASE, href)
+        path = urllib.parse.urlparse(absolute_href).path
+        if tag == "a" and path.startswith("/shop/product/") and "/china/" not in path.lower():
             if self.current is None:
-                self.current = {"url": urllib.parse.urljoin(BASE, href), "text": "", "images": []}
+                self.current = {"url": absolute_href, "text": "", "images": []}
                 self.depth = 1
             else:
                 self.depth += 1
@@ -80,6 +82,8 @@ def parse_products(html, category):
         title = re.sub(r"\s+", " ", title).strip(" -|")
         if len(title) < 4:
             title = text.split("PKR", 1)[0].strip()
+        if re.search(r"cross[- ]?border|prepaid|ship(?:ping)? from china|china catalogue", title, re.I):
+            continue
         stock = re.search(r"Only\s+(\d+)\s+left", text, re.I)
         rating = re.search(r"\b([1-5]\.\d)\b", text[price.end():])
         products.append({
@@ -150,6 +154,10 @@ def collect_rss_signals():
 
 def grounded_web_research(products):
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
+    grouped = {}
+    for product in products:
+        grouped.setdefault(product["category"], []).append(product)
+    search_sample = [item for category_items in grouped.values() for item in category_items[:12]][:120]
     prompt = f"""
 Use Google Search to research the Pakistan market for these products actually listed in Markaz Pakistan Shop.
 Focus on product demand signals, Pakistani customer problems/use cases, competitor products, public ads/videos/reels,
@@ -158,7 +166,7 @@ Prefer Pakistan sources, Pakistani retailers, local marketplaces, public social 
 Do not invent sales, order counts, ad spend, ROAS, or viral metrics. State when results are not available.
 Return a concise research memo with source titles, URLs and dates. Separate facts from hypotheses.
 PRODUCT CANDIDATES:
-{json.dumps([{"id":p["product_id"],"title":p["title"],"price_pkr":p["price_pkr"],"category":p["category"],"url":p["product_url"]} for p in products[:120]],ensure_ascii=False)}
+{json.dumps([{"id":p["product_id"],"title":p["title"],"price_pkr":p["price_pkr"],"category":p["category"],"url":p["product_url"]} for p in search_sample],ensure_ascii=False)}
 """
     body = {"contents": [{"parts": [{"text": prompt}]}],
             "tools": [{"googleSearch": {}}],
