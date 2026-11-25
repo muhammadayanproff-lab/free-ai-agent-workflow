@@ -87,6 +87,14 @@ class RepositoryIntegrityTests(unittest.TestCase):
         self.assertIn('"cod_confirmed_by_owner": False', prepare)
         self.assertIn("never promise COD", copywriter)
 
+    def test_researcher_has_fast_gemini_fallback(self):
+        source = (ROOT / "agents" / "researcher.py").read_text(encoding="utf-8")
+        self.assertIn('GEMINI_FALLBACK_MODEL', source)
+        self.assertIn('gemini-3.5-flash-lite', source)
+        self.assertIn('switching immediately', source)
+        self.assertIn('timeout=90', source)
+        self.assertNotIn('range(8)', source)
+
     def test_manual_video_upload_page_present(self):
         self.assertTrue((ROOT / "docs" / "upload-video.html").is_file())
 
