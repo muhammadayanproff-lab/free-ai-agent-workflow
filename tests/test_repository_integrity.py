@@ -94,11 +94,21 @@ class RepositoryIntegrityTests(unittest.TestCase):
         self.assertIn('def discover_gemini_text_models()', source)
         self.assertIn('supportedGenerationMethods', source)
         self.assertIn('candidates = discover_gemini_text_models()', source)
-        self.assertIn('timeout=90', source)
+        self.assertIn('timeout=45', source)
         self.assertIn('def preflight_gemini_model()', source)
         self.assertIn('preflight_gemini_model()\n    products, crawl_errors = crawl_markaz_shop()', source)
         self.assertIn('timeout=25', source)
         self.assertNotIn('range(8)', source)
+
+    def test_campaign_agents_have_groq_fallback(self):
+        helper = (ROOT / "agents" / "llm_fallback.py").read_text(encoding="utf-8")
+        self.assertIn("def groq_chat(", helper)
+        for name in ("market_analysis.py", "image_campaign_creator.py", "video_prompt_agent.py", "campaign_copywriter.py"):
+            source = (ROOT / "agents" / name).read_text(encoding="utf-8")
+            self.assertIn("from llm_fallback import groq_chat", source)
+            self.assertIn("groq_chat(", source)
+        workflow = (ROOT / ".github" / "workflows" / "campaign_assets.yml").read_text(encoding="utf-8")
+        self.assertGreaterEqual(workflow.count("GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}"), 4)
 
     def test_manual_video_upload_page_present(self):
         self.assertTrue((ROOT / "docs" / "upload-video.html").is_file())
