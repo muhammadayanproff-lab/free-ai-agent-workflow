@@ -1,0 +1,59 @@
+name: Watch for Uploaded Campaign Video
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_run:
+    workflows: ["Prepare Product Campaign Assets"]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  actions: read
+  issues: write
+jobs:
+  watch:
+    if: github.event_name == 'schedule' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find latest successful campaign and download its review
+        id: campaign
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          RUN_JSON=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/campaign_assets.yml/runs?status=completed&per_page=20" --jq '[.workflow_runs[] | select(.conclusion == "success")][0] // empty')
+          if [ -z "$RUN_JSON" ]; then
+            echo "No successful campaign assets run exists yet."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          RUN_ID=$(printf '%s' "$RUN_JSON" | jq -r '.id')
+          RUN_STARTED=$(printf '%s' "$RUN_JSON" | jq -r '.run_started_at')
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "run_started=$RUN_STARTED" >> "$GITHUB_OUTPUT"
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name click-collect-campaign-review --dir campaign_review
+          test -f campaign_review/campaign_copy/campaign_copy.json
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - name: Detect a new Cloudinary video and create approval request
+        id: video
+        if: steps.campaign.outputs.ready == 'true'
+        env:
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CAMPAIGN_RUN_ID: ${{ steps.campaign.outputs.run_id }}
+          CAMPAIGN_RUN_STARTED_AT: ${{ steps.campaign.outputs.run_started }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python agents/video_upload_watcher.py
+      - name: Save combined final approval package
+        if: steps.video.outputs.video_found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: click-collect-final-approval
+          path: campaign_review/
+          if-no-files-found: error
+          retention-days: 30
