@@ -97,7 +97,7 @@ class RepositoryIntegrityTests(unittest.TestCase):
         self.assertIn('timeout=45', source)
         self.assertIn('def preflight_gemini_model()', source)
         self.assertIn('preflight_gemini_model()\n    products, crawl_errors = crawl_markaz_shop()', source)
-        self.assertIn('timeout=25', source)
+        self.assertIn('timeout=15', source)
         self.assertNotIn('range(8)', source)
 
     def test_campaign_agents_have_groq_fallback(self):
