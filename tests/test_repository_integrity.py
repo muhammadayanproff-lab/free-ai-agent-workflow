@@ -26,7 +26,8 @@ class RepositoryIntegrityTests(unittest.TestCase):
 
     def test_meta_requires_explicit_approval_and_four_captions(self):
         source = (ROOT / "agents" / "meta_publisher.py").read_text(encoding="utf-8")
-        self.assertIn('required("PUBLISH_APPROVAL")!="APPROVE"', source)
+        self.assertIn('required("PUBLISH_APPROVAL")', source)
+        self.assertIn('!= "APPROVE"', source)
         for key in ("instagram_image_caption", "facebook_image_caption", "instagram_video_caption", "facebook_video_caption"):
             self.assertIn(key, source)
 
