@@ -196,6 +196,42 @@ PRODUCT CANDIDATES:
         raise RuntimeError("Google Search grounding returned no research memo.")
     return memo, sources
 
+def discover_gemini_text_models():
+    """Read this API key's model catalogue and return text-generation models."""
+    preferred = [
+        MODEL,
+        os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite"),
+        os.getenv("GEMINI_TERTIARY_MODEL", "gemini-3.1-flash-lite"),
+    ]
+    discovered = []
+    if API_KEY:
+        request = urllib.request.Request(
+            "https://generativelanguage.googleapis.com/v1beta/models",
+            headers={"x-goog-api-key": API_KEY}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                catalogue = json.loads(response.read().decode("utf-8"))
+            for item in catalogue.get("models", []):
+                name = str(item.get("name", "")).removeprefix("models/")
+                methods = item.get("supportedGenerationMethods", [])
+                lowered = name.lower()
+                if not name.startswith("gemini-") or "generateContent" not in methods:
+                    continue
+                if any(term in lowered for term in (
+                    "image", "audio", "live", "transcrib", "tts", "embedding",
+                    "veo", "robotics", "computer-use"
+                )):
+                    continue
+                discovered.append(name)
+        except Exception as exc:
+            print(f"Gemini model catalogue unavailable; using configured fallback list: {exc}")
+    # Keep preferred models first, then use the remaining text-capable models
+    # exposed to this exact API key. A bounded list avoids wasting runner time.
+    ordered = list(dict.fromkeys(preferred + discovered))
+    return ordered[:12]
+
+
 def gemini_select(products, rss_signals, rss_errors, web_memo, web_sources):
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     prompt = f"""
@@ -257,9 +293,7 @@ RSS COLLECTION ERRORS:
     result = None
     errors = []
     # Switch away from an overloaded primary quickly instead of waiting 17 minutes.
-    fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
-    tertiary_model = os.getenv("GEMINI_TERTIARY_MODEL", "gemini-3.1-flash-lite")
-    model_candidates = list(dict.fromkeys([MODEL, fallback_model, tertiary_model]))
+    model_candidates = discover_gemini_text_models()
     for model_index, model_name in enumerate(model_candidates):
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         for attempt in range(2):
@@ -276,6 +310,9 @@ RSS COLLECTION ERRORS:
             except urllib.error.HTTPError as error:
                 detail = error.read().decode("utf-8", "replace")
                 errors.append(f"{model_name} HTTP {error.code}: {detail[:500]}")
+                if error.code in (400, 403, 404, 410):
+                    print(f"Skipping Gemini model {model_name}: API returned HTTP {error.code} (not enabled or not usable for this key).")
+                    break
                 if error.code not in (408, 429, 500, 502, 503, 504):
                     raise RuntimeError(f"Gemini product selection failed ({error.code}): {detail[:1000]}") from error
                 if model_index < len(model_candidates) - 1:
@@ -308,9 +345,7 @@ RSS COLLECTION ERRORS:
 def preflight_gemini_model():
     """Check Gemini availability before spending time crawling the catalogue."""
     global MODEL
-    fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
-    tertiary_model = os.getenv("GEMINI_TERTIARY_MODEL", "gemini-3.1-flash-lite")
-    candidates = list(dict.fromkeys([MODEL, fallback_model, tertiary_model]))
+    candidates = discover_gemini_text_models()
     errors = []
     for model_name in candidates:
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
@@ -334,9 +369,12 @@ def preflight_gemini_model():
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", "replace")
             errors.append(f"{model_name} HTTP {error.code}: {detail[:400]}")
+            if error.code in (400, 403, 404, 410):
+                print(f"Gemini preflight: skipping {model_name}; HTTP {error.code} (not enabled or not usable for this key).")
+                continue
             if error.code not in (408, 429, 500, 502, 503, 504):
                 raise RuntimeError(f"Gemini preflight failed ({error.code}) for {model_name}: {detail[:800]}") from error
-            print(f"Gemini preflight: {model_name} unavailable (HTTP {error.code}).")
+            print(f"Gemini preflight: {model_name} unavailable (HTTP {error.code}); trying next model.")
         except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
             errors.append(f"{model_name} network/timeout: {error}")
             print(f"Gemini preflight: {model_name} unavailable ({error}).")
