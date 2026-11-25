@@ -255,31 +255,49 @@ RSS COLLECTION ERRORS:
             "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json", "maxOutputTokens": 5000}}
     payload = json.dumps(body).encode("utf-8")
     result = None
-    last_error = None
-    # Retry transient API/network timeouts with a fresh request each time.
-    for attempt in range(8):
-        request = urllib.request.Request(endpoint, data=payload,
-            headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY}, method="POST")
-        try:
-            with urllib.request.urlopen(request, timeout=300) as response:
-                result = json.loads(response.read().decode("utf-8"))
+    errors = []
+    # Switch away from an overloaded primary quickly instead of waiting 17 minutes.
+    fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
+    model_candidates = [MODEL] if MODEL == fallback_model else [MODEL, fallback_model]
+    for model_index, model_name in enumerate(model_candidates):
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        for attempt in range(2):
+            request = urllib.request.Request(
+                endpoint, data=payload,
+                headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY},
+                method="POST"
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=90) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+                print(f"Gemini product selection succeeded with model: {model_name}")
+                break
+            except urllib.error.HTTPError as error:
+                detail = error.read().decode("utf-8", "replace")
+                errors.append(f"{model_name} HTTP {error.code}: {detail[:500]}")
+                if error.code not in (408, 429, 500, 502, 503, 504):
+                    raise RuntimeError(f"Gemini product selection failed ({error.code}): {detail[:1000]}") from error
+                if model_index < len(model_candidates) - 1:
+                    print(f"Gemini {model_name} returned HTTP {error.code}; switching immediately to {fallback_model}.")
+                    break
+                if attempt == 0:
+                    print(f"Fallback model {model_name} returned HTTP {error.code}; retrying once in 10 seconds.")
+                    time.sleep(10)
+            except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
+                errors.append(f"{model_name} network/timeout error: {error}")
+                if model_index < len(model_candidates) - 1:
+                    print(f"Gemini {model_name} timed out; switching immediately to {fallback_model}.")
+                    break
+                if attempt == 0:
+                    time.sleep(10)
+        if result is not None:
             break
-        except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", "replace")
-            last_error = RuntimeError(f"Gemini product selection failed ({error.code}): {detail[:1000]}")
-            if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 7:
-                raise last_error
-        except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
-            last_error = error
-            if attempt == 7:
-                raise RuntimeError(
-                    f"Gemini product selection timed out after 8 attempts: {error}"
-                ) from error
-        delay = min(30 * (2 ** attempt), 180)
-        print(f"Gemini product selection attempt {attempt + 1}/8 did not complete; retrying in {delay}s. Temporary 503/429/5xx errors are retried with a longer cooldown.")
-        time.sleep(delay)
     if result is None:
-        raise RuntimeError(f"Gemini product selection is still unavailable after 8 attempts with cooldowns. No product was auto-selected to avoid inventing an AI recommendation. Last error: {last_error}")
+        raise RuntimeError(
+            "Gemini product selection failed on primary and fallback models. "
+            "Stopped after bounded retries to avoid wasting runner time. Details: "
+            + " | ".join(errors)
+        )
     text = "\n".join(p.get("text", "") for p in result.get("candidates", [{}])[0].get("content", {}).get("parts", []) if p.get("text")).strip()
     try:
         return json.loads(text)
