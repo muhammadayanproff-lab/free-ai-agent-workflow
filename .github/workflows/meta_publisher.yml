@@ -1,34 +1,14 @@
-name: Approved Image and Video Publishing
+name: Publish Approved Campaign to Instagram and Facebook
 on:
-  workflow_dispatch:
-    inputs:
-      approval:
-        description: "Choose APPROVE only after reviewing the campaign artifact"
-        required: true
-        type: choice
-        options: [REJECT, APPROVE]
-      platforms:
-        description: "Publish both separate posts to"
-        required: true
-        default: "Instagram,Facebook"
-        type: choice
-        options: ["Instagram,Facebook", "Instagram", "Facebook"]
-      image_choice:
-        description: "Choose an AI concept or the original Markaz supplier photo"
-        required: true
-        default: "concept_1"
-        type: choice
-        options: ["concept_1", "concept_2", "concept_3", "original_1"]
-      video_url:
-        description: "Public HTTPS video URL copied from the Cloudinary upload page"
-        required: true
-        type: string
+  issue_comment:
+    types: [created]
 permissions:
   contents: read
   actions: read
+  issues: write
 jobs:
   publish:
-    if: inputs.approval == 'APPROVE'
+    if: github.event.issue.pull_request == null && github.event.issue.state == 'open' && startsWith(github.event.issue.title, 'Campaign approval required: run ') && github.event.comment.body == 'APPROVE' && github.event.comment.user.login == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -36,25 +16,38 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Download latest successful campaign assets and captions
+      - name: Read campaign run and uploaded video from approval issue
+        id: approval
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow campaign_assets.yml --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion == "success")) | .[0].databaseId // empty')
-          if [ -z "$RUN_ID" ]; then
-            echo "No successful campaign-assets run found. Prepare and review a campaign first."
+          set -euo pipefail
+          ISSUE_BODY=$(gh issue view "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+          CAMPAIGN_RUN_ID=$(printf '%s\\n' "$ISSUE_BODY" | sed -n 's/.*<!-- campaign_run_id=\\([0-9][0-9]*\\) -->.*/\\1/p')
+          VIDEO_URL=$(printf '%s\\n' "$ISSUE_BODY" | sed -n 's/.*<!-- video_url=\\(https:\\/\\/[^ ]*\\) -->.*/\\1/p')
+          if ! [[ "$CAMPAIGN_RUN_ID" =~ ^[0-9]+$ ]] || ! [[ "$VIDEO_URL" =~ ^https:// ]]; then
+            echo "Approval issue is missing a valid campaign run ID or HTTPS video URL."
             exit 1
           fi
-          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name click-collect-campaign-review --dir campaign_review
+          echo "campaign_run_id=$CAMPAIGN_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "video_url=$VIDEO_URL" >> "$GITHUB_OUTPUT"
+      - name: Download exact campaign review artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CAMPAIGN_RUN_ID: ${{ steps.approval.outputs.campaign_run_id }}
+        run: |
+          gh run download "$CAMPAIGN_RUN_ID" --repo "$GITHUB_REPOSITORY" --name click-collect-campaign-review --dir campaign_review
           test -f campaign_review/campaign_copy/campaign_copy.json
           test -f campaign_review/campaign_media_urls.json
-      - name: Publish image and video separately with generated captions
+      - name: Publish image and video as separate posts with four platform-specific captions
         env:
-          PUBLISH_APPROVAL: ${{ inputs.approval }}
-          TARGET_PLATFORMS: ${{ inputs.platforms }}
-          IMAGE_CHOICE: ${{ inputs.image_choice }}
-          VIDEO_URL: ${{ inputs.video_url }}
+          PUBLISH_APPROVAL: APPROVE
+          TARGET_PLATFORMS: Instagram,Facebook
+          IMAGE_CHOICE: concept_1
+          VIDEO_URL: ${{ steps.approval.outputs.video_url }}
           CAMPAIGN_REVIEW_DIR: campaign_review
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
           META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
@@ -68,3 +61,12 @@ jobs:
           name: meta-publishing-receipt
           path: publish_output/
           retention-days: 30
+      - name: Confirm publication and close approval issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Published successfully. The publishing receipt is available in this workflow run's artifacts."
+          gh issue close "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY"
