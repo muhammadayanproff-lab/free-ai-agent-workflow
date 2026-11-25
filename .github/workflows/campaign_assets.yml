@@ -39,25 +39,25 @@ jobs:
       - name: Analyze Pakistan demand, competitors and creative examples
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_TEXT_MODEL: gemini-2.5-flash
+          GEMINI_TEXT_MODEL: gemini-3.8-flash
         run: python agents/market_analysis.py
       - name: Generate three AI campaign image concepts
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_TEXT_MODEL: gemini-2.5-flash
+          GEMINI_TEXT_MODEL: gemini-3.8-flash
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: python agents/image_campaign_creator.py
       - name: Analyze original product photos and create one video prompt
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_VISION_MODEL: gemini-2.5-flash
+          GEMINI_VISION_MODEL: gemini-3.8-flash
           PRODUCT_IMAGES_DIR: source_product_images
         run: python agents/video_prompt_agent.py
       - name: Write SEO package and four separate captions
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_TEXT_MODEL: gemini-2.5-flash
+          GEMINI_TEXT_MODEL: gemini-3.8-flash
         run: python agents/campaign_copywriter.py
       - name: Upload AI concepts and original product photo to Cloudinary
         env:
