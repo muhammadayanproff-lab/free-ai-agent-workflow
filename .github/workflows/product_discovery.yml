@@ -35,7 +35,7 @@ jobs:
           PY
   discover:
     needs: schedule_guard
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.schedule_guard.outputs.should_run == 'true')
+    if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || needs.schedule_guard.outputs.should_run == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
