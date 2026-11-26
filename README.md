@@ -12,6 +12,14 @@ The pipeline is scheduled and chained. You do not need to manually start each Gi
 5. Review the original supplier image, AI concepts, video, SEO and captions. Also verify current product stock, final price and COD/payment availability at checkout. When ready, comment exactly **APPROVE** on the approval issue.
 6. The approval comment automatically publishes the selected AI image concept and uploaded video as four separate posts: Instagram image, Instagram Reel, Facebook image and Facebook video. Each post uses its own generated caption. The workflow then posts a receipt and closes the approval issue.
 
+## Local open-source text model fallback
+
+- The Campaign Assets workflow downloads the public Apache-2.0 Qwen2.5-1.5B-Instruct GGUF Q4_K_M model from Hugging Face when it is not already cached. The quantized file is about 1.12 GB.
+- The model is cached by GitHub Actions and is not committed into this repository. No Hugging Face token is needed for this public model.
+- The workflow attempts to install the optional CPU-only llama.cpp Python runtime. If the runtime or model download is unavailable, agents continue to Gemini/Groq where configured and then use local Python templates.
+- Qwen is a text model, not an image-generation or image-vision model. Cloudflare FLUX remains responsible for image generation; image inspection still uses a vision-capable hosted provider when available, with a conservative no-vision video-prompt fallback.
+- Small local models can produce weaker copy or analysis than larger hosted models. The workflow preserves factuality checks and requires human review; local inference does not guarantee zero failures.
+
 ## What still requires you
 
 - Generate the video externally from the supplied prompt and upload it on the upload page.
