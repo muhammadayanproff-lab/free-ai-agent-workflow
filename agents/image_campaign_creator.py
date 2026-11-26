@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from llm_fallback import groq_chat
+from local_llm import qwen_chat
 
 API_KEY=os.environ.get("GEMINI_API_KEY","").strip()
 CF_ACCOUNT=os.environ.get("CLOUDFLARE_ACCOUNT_ID","").strip()
@@ -60,6 +61,10 @@ Market analysis: {analysis[:7000]}
             print(f"Gemini returned invalid image-prompt JSON ({exc}); trying Groq.")
     if len(prompts) != 3:
         fallback = groq_chat(prompt, max_tokens=2500, json_mode=True)
+        prompts = fallback.get("prompts", []) if isinstance(fallback, dict) else []
+    if len(prompts) != 3:
+        print("Hosted prompt providers unavailable; trying local Qwen.")
+        fallback = qwen_chat(prompt, max_tokens=1800, json_mode=True)
         prompts = fallback.get("prompts", []) if isinstance(fallback, dict) else []
     if len(prompts) != 3 or not all(isinstance(x, str) and len(x) > 30 for x in prompts):
         # Last-resort local prompt templates keep the campaign moving when both
@@ -133,7 +138,6 @@ def generate(prompt, path):
     path.write_bytes(base64.b64decode(image))
 
 def main():
-    if not API_KEY and not os.environ.get("GROQ_API_KEY","").strip(): raise RuntimeError("Neither GEMINI_API_KEY nor GROQ_API_KEY is configured.")
     if not CF_ACCOUNT or not CF_TOKEN: raise RuntimeError("CLOUDFLARE_ACCOUNT_ID/API_TOKEN secret is missing.")
     product=json.loads(Path("product_data/product.json").read_text(encoding="utf-8"))
     analysis=Path("market_analysis/market_analysis.md").read_text(encoding="utf-8")
