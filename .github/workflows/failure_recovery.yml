@@ -1,0 +1,57 @@
+name: Automatic Failure Diagnosis and Safe Recovery
+on:
+  workflow_run:
+    workflows:
+      - "Pakistan Product Discovery"
+      - "Prepare Product Campaign Assets"
+    types: [completed]
+permissions:
+  actions: write
+  contents: read
+  issues: write
+jobs:
+  diagnose:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Collect failed-step logs and retry only transient failures once
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          gh run view "$RUN_ID" --repo "$REPOSITORY" --log-failed > failed.log 2>&1 || true
+          tail -n 120 failed.log > failure_excerpt.txt
+          if [ "$RUN_ATTEMPT" = "1" ] && grep -Eqi 'HTTP (408|425|429|500|502|503|504)|timed out|TimeoutError|ConnectionResetError|connection reset|temporarily unavailable|ECONNRESET|502 Bad Gateway|503 Service Unavailable' failed.log; then
+            echo "Transient provider/network failure detected; retrying failed jobs once."
+            gh run rerun "$RUN_ID" --repo "$REPOSITORY" --failed
+            exit 0
+          fi
+          TITLE="Auto diagnosis: $WORKFLOW_NAME run $RUN_ID failed"
+          export TITLE
+          EXISTING=$(gh issue list --repo "$REPOSITORY" --state all --limit 100 --json title --jq 'map(select(.title == env.TITLE)) | length')
+          if [ "$EXISTING" = "0" ]; then
+            {
+              echo "## Workflow failure detected automatically"
+              echo
+              echo "- Workflow: $WORKFLOW_NAME"
+              echo "- Run: $RUN_URL"
+              echo "- Attempt: $RUN_ATTEMPT"
+              echo
+              echo "### Recovery decision"
+              echo "No safe automatic retry rule matched, or the one permitted transient retry was already used. This may require a code, configuration, secret, permission, or external-service change. The system will not repeatedly rerun a deterministic failure and waste runner minutes."
+              echo
+              echo "### Failed log excerpt"
+              echo '~~~text'
+              cat failure_excerpt.txt
+              echo '~~~'
+            } > failure-report.md
+            gh issue create --repo "$REPOSITORY" --title "$TITLE" --body-file failure-report.md
+          else
+            echo "A diagnosis issue already exists for this failed run."
+          fi
