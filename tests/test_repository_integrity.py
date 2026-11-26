@@ -124,6 +124,14 @@ class RepositoryIntegrityTests(unittest.TestCase):
             source = (ROOT / "agents" / name).read_text(encoding="utf-8")
             self.assertIn("from local_llm import qwen_chat", source)
 
+    def test_product_discovery_has_safe_no_ai_selection_fallback(self):
+        source = (ROOT / "agents" / "researcher.py").read_text(encoding="utf-8")
+        self.assertIn("def deterministic_product_fallback(products):", source)
+        self.assertIn("def ensure_product_selection(analysis, products):", source)
+        self.assertIn('"selection_method": "deterministic_catalogue_fallback"', source)
+        self.assertIn("not evidence of demand, sales or conversion", source)
+        self.assertIn("analysis, selected, selected_assessment = ensure_product_selection(analysis, products)", source)
+
     def test_manual_video_upload_page_present(self):
         self.assertTrue((ROOT / "docs" / "upload-video.html").is_file())
 
