@@ -592,7 +592,8 @@ def main():
              f"Markaz Pakistan public products scanned: {len(products)}", ""]
     if selected:
         a = selected["research_assessment"]
-        lines += ["## Recommended product — verify exact COD before campaign", "",
+        heading = "## Low-confidence test candidate — verify exact COD before campaign" if analysis.get("selection_method") == "deterministic_catalogue_fallback" else "## Recommended product — verify exact COD before campaign"
+        lines += [heading, "",
                   f"- **{selected['title']}**", f"- Markaz product ID: {selected['product_id']}",
                   f"- Listed price: PKR {selected['price_pkr']}", f"- Category: {selected['category']}",
                   f"- Product page: {selected['product_url']}", f"- Main product image: {(selected.get('image_urls') or ['Not shown'])[0]}", f"- Opportunity score: {a.get('score')}/10",
