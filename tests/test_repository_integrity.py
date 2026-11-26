@@ -129,7 +129,7 @@ class RepositoryIntegrityTests(unittest.TestCase):
         self.assertIn("def deterministic_product_fallback(products):", source)
         self.assertIn("def ensure_product_selection(analysis, products):", source)
         self.assertIn('"selection_method": "deterministic_catalogue_fallback"', source)
-        self.assertIn("not evidence of demand, sales or conversion", source)
+        self.assertIn("not evidence of demand, sales or conversion", source.lower())
         self.assertIn("analysis, selected, selected_assessment = ensure_product_selection(analysis, products)", source)
 
     def test_manual_video_upload_page_present(self):
