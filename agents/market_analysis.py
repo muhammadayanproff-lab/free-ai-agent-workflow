@@ -8,6 +8,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from llm_fallback import groq_chat
+from local_llm import qwen_chat
 
 API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-3.8-flash")
@@ -101,17 +102,25 @@ Do not give exact sales forecasts without actual store/ad data. Google Trends/ne
             web = chunk.get("web", {})
             if web.get("uri"):
                 grounded_sources.append({"title": web.get("title", ""), "url": web["uri"]})
-    if not report and rss_sources:
+    if not report:
         print("Gemini grounded market analysis unavailable; trying Groq with collected RSS evidence only.")
         groq_prompt = prompt + "\n\nIMPORTANT: Google Search grounding was unavailable. Use only the supplied RSS evidence, clearly label gaps, and do not invent sources."
-        report = groq_chat(groq_prompt, max_tokens=6500) or ""
+        report = groq_chat(groq_prompt, max_tokens=5000) or ""
     if not report:
-        if not rss_sources:
-            raise RuntimeError("Neither Google Search grounding nor Pakistan RSS sources returned research.")
+        print("Hosted market analysis providers unavailable; trying local Qwen.")
+        local_prompt = prompt + "\n\nIMPORTANT: You do not have live web search. Use only the RSS evidence supplied above. Clearly state when evidence is missing and do not invent competitors, prices, reviews, trends or URLs."
+        report = qwen_chat(local_prompt, max_tokens=3500) or ""
+    if not report:
+        rss_note = json.dumps(rss_sources[:30], ensure_ascii=False)
         report = (
             "## Grounded web search unavailable\n\n"
-            "Google Search grounding could not be used during this run. The RSS evidence below is limited; "
-            "do not treat it as complete competitor or demand research.\n"
+            "No AI research provider was available. This is a limited evidence collection, not a market-demand conclusion. "
+            "Do not treat missing evidence as proof of low demand.\n\n"
+            "## Public RSS evidence collected\n\n"
+            + (rss_note if rss_sources else "No RSS items were retrieved during this run.")
+            + "\n\n## Required manual research\n\n"
+            "Verify competitors, current prices, public customer feedback, product suitability and demand before spending on ads. "
+            "No sales volume, ROAS, review count or competitor price is inferred."
         )
     Path("market_analysis").mkdir(exist_ok=True)
     Path("market_analysis/market_analysis.md").write_text("# Pakistan Market & Trend Analysis\n\n" + report + "\n", encoding="utf-8")
