@@ -110,6 +110,18 @@ class RepositoryIntegrityTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "campaign_assets.yml").read_text(encoding="utf-8")
         self.assertGreaterEqual(workflow.count("GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}"), 4)
 
+    def test_local_qwen_cpu_fallback_is_optional_and_cached(self):
+        helper = (ROOT / "agents" / "local_llm.py").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "campaign_assets.yml").read_text(encoding="utf-8")
+        self.assertIn("def qwen_chat(", helper)
+        self.assertIn("from llama_cpp import Llama", helper)
+        self.assertIn("Qwen/Qwen2.5-1.5B-Instruct-GGUF", workflow)
+        self.assertIn("actions/cache@v4", workflow)
+        self.assertIn("continue-on-error: true", workflow)
+        for name in ("market_analysis.py", "image_campaign_creator.py", "video_prompt_agent.py", "campaign_copywriter.py"):
+            source = (ROOT / "agents" / name).read_text(encoding="utf-8")
+            self.assertIn("from local_llm import qwen_chat", source)
+
     def test_manual_video_upload_page_present(self):
         self.assertTrue((ROOT / "docs" / "upload-video.html").is_file())
 
