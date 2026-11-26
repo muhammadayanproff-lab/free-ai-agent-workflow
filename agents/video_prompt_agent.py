@@ -1,6 +1,7 @@
 import base64,json,mimetypes,os,time,urllib.error,urllib.request
 from pathlib import Path
 from llm_fallback import groq_chat
+from local_llm import qwen_chat
 
 API_KEY=os.environ.get("GEMINI_API_KEY","").strip()
 MODEL=os.getenv("GEMINI_VISION_MODEL","gemini-3.8-flash")
@@ -59,6 +60,19 @@ The single prompt must preserve the exact product identity, silhouette, proporti
         print("Gemini response did not meet the required format; retrying with Groq vision.")
         answer = groq_chat(parts[0]["text"], max_tokens=3500, image_paths=image_paths) or ""
     if "ONE FINAL VIDEO PROMPT" not in answer.upper() or len(answer)<250:
+        print("Hosted vision providers unavailable; trying text-only local Qwen. It will not be told that it inspected the photos.")
+        text_only_prompt = (
+            "You cannot view or analyze images. Do not claim visual inspection. "
+            "Write IMAGE ANALYSIS stating that automated visual analysis is unavailable, "
+            "then ONE FINAL VIDEO PROMPT for a 10-15 second vertical ecommerce video. "
+            "Treat original supplier photos as strict references for the external video editor; "
+            "do not invent product details. Use only these listing facts:\\n"
+            + json.dumps(details, ensure_ascii=False)
+        )
+        local_answer = qwen_chat(text_only_prompt, max_tokens=1800)
+        if isinstance(local_answer, str) and "ONE FINAL VIDEO PROMPT" in local_answer.upper() and len(local_answer) > 250:
+            answer = local_answer
+    if "ONE FINAL VIDEO PROMPT" not in answer.upper() or len(answer)<250:
         print(
             "Gemini/Groq vision unavailable; using a conservative reference-faithful "
             "video prompt template. The editor must visually verify every product detail."
@@ -84,7 +98,6 @@ Use smooth restrained camera movement, realistic scale, consistent product geome
     return answer
 
 def main():
-    if not API_KEY and not os.environ.get("GROQ_API_KEY","").strip(): raise RuntimeError("Neither GEMINI_API_KEY nor GROQ_API_KEY is configured.")
     product_file=Path("product_data/product.json")
     if not product_file.exists(): raise RuntimeError("Run product preparation first; product_data/product.json is missing.")
     details=json.loads(product_file.read_text(encoding="utf-8"))
