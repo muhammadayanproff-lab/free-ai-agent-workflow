@@ -135,5 +135,13 @@ class RepositoryIntegrityTests(unittest.TestCase):
     def test_manual_video_upload_page_present(self):
         self.assertTrue((ROOT / "docs" / "upload-video.html").is_file())
 
+    def test_failure_recovery_monitors_meta_without_blind_publish_retry(self):
+        recovery = (ROOT / ".github" / "workflows" / "failure_recovery.yml").read_text(encoding="utf-8")
+        self.assertIn('"Publish Approved Campaign to Instagram and Facebook"', recovery)
+        self.assertIn('Error validating access token', recovery)
+        self.assertIn('META_PAGE_ACCESS_TOKEN', recovery)
+        self.assertIn('if [ "$WORKFLOW_NAME" != "Publish Approved Campaign to Instagram and Facebook" ]', recovery)
+        self.assertIn('OAuth error 190 / subcode 463', recovery)
+
 if __name__ == "__main__":
     unittest.main()
