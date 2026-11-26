@@ -453,6 +453,109 @@ def preflight_gemini_model():
     )
 
 
+def deterministic_product_fallback(products):
+    """Choose a cautious test candidate when AI returns no selection.
+
+    This is catalogue-based triage only, not proof of demand or sales.
+    """
+    blocked = re.compile(
+        r"weapon|knife|gun|firearm|supplement|medicine|drug|pesticide|"
+        r"chemical|adult|vape|cigarette|tobacco|alcohol|medical|surgical",
+        re.I,
+    )
+    useful = re.compile(
+        r"clean|storage|organ|kitchen|cook|chopper|grinder|lamp|light|"
+        r"charger|holder|stand|pump|tool|repair|car|bike|water|bottle|"
+        r"fan|vacuum|brush|electric|portable|saver|rack|container|"
+        r"cutter|sealer|dispenser|measuring|timer",
+        re.I,
+    )
+    ranked = []
+    for product in products:
+        title = str(product.get("title", "")).strip()
+        category = str(product.get("category", "")).strip()
+        if not title or blocked.search(title) or blocked.search(category):
+            continue
+        if category.lower() == "kids clothing" or "clothing" in category.lower():
+            continue
+        if not product.get("image_urls"):
+            continue
+        try:
+            price = float(str(product.get("price_pkr", "")).replace(",", ""))
+        except (TypeError, ValueError):
+            continue
+        if price <= 0 or price > 15000:
+            continue
+        score = 0
+        if useful.search(title):
+            score += 4
+        if price <= 5000:
+            score += 3
+        elif price <= 9000:
+            score += 2
+        else:
+            score += 1
+        if len(product.get("image_urls", [])) >= 2:
+            score += 1
+        if category.lower() in {"kitchenware", "storage & cleaning", "car & bike accessories", "electronics"}:
+            score += 1
+        ranked.append((score, price, title.lower(), product))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda row: (-row[0], row[1], row[2]))
+    return ranked[0][3]
+
+
+def ensure_product_selection(analysis, products):
+    """Preserve AI selection when valid; otherwise choose a clearly-labelled test candidate."""
+    by_id = {str(p["product_id"]): p for p in products}
+    shortlist = analysis.get("shortlist", [])
+    if not isinstance(shortlist, list):
+        shortlist = []
+    selected_id = str(analysis.get("selected_product_id", "")).strip()
+    valid_shortlist = {
+        str(item.get("product_id")): item
+        for item in shortlist if isinstance(item, dict)
+    }
+    if selected_id in by_id and selected_id in valid_shortlist:
+        item = valid_shortlist[selected_id]
+        try:
+            score = float(item.get("score", 0))
+        except (TypeError, ValueError):
+            score = 0
+        if score >= 7:
+            return analysis, by_id[selected_id], item
+
+    fallback = deterministic_product_fallback(products)
+    if fallback is None:
+        return analysis, None, None
+    fallback_id = str(fallback["product_id"])
+    assessment = {
+        "product_id": fallback_id,
+        "score": 7,
+        "problem_solved": "Potential everyday-use case inferred from the product listing; not independently verified",
+        "buyer": "To be validated with Pakistani customers",
+        "evidence_summary": "AI did not identify a sufficiently evidenced winner. This is a cautious catalogue-based test candidate selected using listing title, category, price and image availability only. It is NOT evidence of demand, sales or conversion.",
+        "creative_angle": "Demonstrate the actual product and its visible use without making unverified performance claims",
+        "risks": ["Demand and competitor evidence remain unverified", "Verify stock, exact variant, final price and COD before approval"],
+        "recommendation": "TEST_SMALL",
+        "confidence": "low",
+        "selection_method": "deterministic_catalogue_fallback",
+    }
+    fallback = dict(fallback)
+    fallback["research_assessment"] = assessment
+    fallback["cod_status"] = "Not verified at exact product checkout; owner confirmation required"
+    updated = dict(analysis)
+    updated["shortlist"] = [x for x in shortlist if isinstance(x, dict) and str(x.get("product_id")) != fallback_id]
+    updated["shortlist"].append(assessment)
+    updated["selected_product_id"] = fallback_id
+    updated["selection_reason"] = (
+        "No AI-selected product met the evidence threshold. A low-confidence test candidate "
+        "was selected by deterministic catalogue triage only; this is not a demand or sales claim."
+    )
+    updated["selection_method"] = "deterministic_catalogue_fallback"
+    return updated, fallback, assessment
+
 def main():
     if not API_KEY:
         raise RuntimeError("GEMINI_API_KEY secret is missing.")
@@ -469,17 +572,15 @@ def main():
     analysis = gemini_select(products, rss_signals, rss_errors + crawl_errors, web_memo, web_sources)
     by_id = {p["product_id"]: p for p in products}
     for item in analysis.get("shortlist", []):
-        if str(item.get("product_id")) not in by_id:
+        if not isinstance(item, dict) or str(item.get("product_id")) not in by_id:
             raise RuntimeError("Gemini returned a product ID not found in the Markaz Pakistan catalogue crawl.")
+    analysis, selected, selected_assessment = ensure_product_selection(analysis, products)
     selected_id = str(analysis.get("selected_product_id", "")).strip()
-    selected = by_id.get(selected_id)
     if selected:
-        score = next((x.get("score", 0) for x in analysis.get("shortlist", []) if str(x.get("product_id")) == selected_id), 0)
-        if not isinstance(score, (int, float)) or score < 7:
-            raise RuntimeError("Selected product did not meet the minimum evidence score.")
         selected = dict(selected)
-        selected["research_assessment"] = next(x for x in analysis.get("shortlist", []) if str(x.get("product_id")) == selected_id)
-        selected["cod_status"] = "Pakistan Shop category policy states COD; exact product checkout must be confirmed by owner"
+        selected["research_assessment"] = selected_assessment
+        if selected.get("selection_method") != "deterministic_catalogue_fallback":
+            selected["cod_status"] = "Pakistan Shop category policy states COD; exact product checkout must be confirmed by owner"
     OUT.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).isoformat()
     payload = {"generated_at_utc": timestamp, "markaz_products_scanned": len(products),
