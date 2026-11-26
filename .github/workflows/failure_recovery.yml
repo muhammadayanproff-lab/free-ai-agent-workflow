@@ -4,6 +4,7 @@ on:
     workflows:
       - "Pakistan Product Discovery"
       - "Prepare Product Campaign Assets"
+      - "Publish Approved Campaign to Instagram and Facebook"
     types: [completed]
 permissions:
   actions: write
@@ -15,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Collect failed-step logs and retry only transient failures once
+      - name: Collect failed-step logs and retry only safe transient failures once
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
@@ -27,11 +28,17 @@ jobs:
           set -euo pipefail
           gh run view "$RUN_ID" --repo "$REPOSITORY" --log-failed > failed.log 2>&1 || true
           tail -n 120 failed.log > failure_excerpt.txt
-          if [ "$RUN_ATTEMPT" = "1" ] && grep -Eqi 'HTTP (408|425|429|500|502|503|504)|timed out|TimeoutError|ConnectionResetError|connection reset|temporarily unavailable|ECONNRESET|502 Bad Gateway|503 Service Unavailable' failed.log; then
+
+          # Publishing has external side effects. Never blindly retry it: a prior
+          # platform post may have succeeded before a later platform failed.
+          if [ "$WORKFLOW_NAME" != "Publish Approved Campaign to Instagram and Facebook" ] &&
+             [ "$RUN_ATTEMPT" = "1" ] &&
+             grep -Eqi 'HTTP (408|425|429|500|502|503|504)|timed out|TimeoutError|ConnectionResetError|connection reset|temporarily unavailable|ECONNRESET|502 Bad Gateway|503 Service Unavailable' failed.log; then
             echo "Transient provider/network failure detected; retrying failed jobs once."
             gh run rerun "$RUN_ID" --repo "$REPOSITORY" --failed
             exit 0
           fi
+
           TITLE="Auto diagnosis: $WORKFLOW_NAME run $RUN_ID failed"
           export TITLE
           EXISTING=$(gh issue list --repo "$REPOSITORY" --state all --limit 100 --json title --jq 'map(select(.title == env.TITLE)) | length')
@@ -44,7 +51,13 @@ jobs:
               echo "- Attempt: $RUN_ATTEMPT"
               echo
               echo "### Recovery decision"
-              echo "No safe automatic retry rule matched, or the one permitted transient retry was already used. This may require a code, configuration, secret, permission, or external-service change. The system will not repeatedly rerun a deterministic failure and waste runner minutes."
+              if grep -Eqi 'Error validating access token|Session has expired|OAuthException.*190|error_subcode[^0-9]*463' failed.log; then
+                echo "**Meta access token expired or invalid (OAuth error 190 / subcode 463).** Generate a fresh Page access token in Meta and update the GitHub secret META_PAGE_ACCESS_TOKEN. Then rerun this publishing workflow only after checking the publishing log/receipt for existing posts. Credentials cannot be regenerated automatically."
+              elif [ "$WORKFLOW_NAME" = "Publish Approved Campaign to Instagram and Facebook" ]; then
+                echo "Publishing was not automatically retried because platform posts are external side effects and a partial success could create duplicates. Review the failed step and any receipt before manually retrying."
+              else
+                echo "No safe automatic retry rule matched, or the one permitted transient retry was already used. This may require a code, configuration, secret, permission, or external-service change. The system will not repeatedly rerun a deterministic failure and waste runner minutes."
+              fi
               echo
               echo "### Failed log excerpt"
               echo '~~~text'
