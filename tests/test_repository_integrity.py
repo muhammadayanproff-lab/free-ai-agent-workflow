@@ -48,7 +48,9 @@ class RepositoryIntegrityTests(unittest.TestCase):
         campaign = (ROOT / ".github" / "workflows" / "campaign_assets.yml").read_text(encoding="utf-8")
         prepare = (ROOT / "agents" / "prepare_product.py").read_text(encoding="utf-8")
         self.assertIn("product_discovery_output/", discovery)
-        self.assertIn("--dir product_discovery_output", campaign)
+        self.assertIn("path: product_discovery_output", campaign)
+        self.assertIn("actions/download-artifact@v4", campaign)
+        self.assertIn("steps.discovery.outputs.run_id", campaign)
         self.assertIn("product_discovery_output/selected_product.json", prepare)
 
     def test_video_upload_preset_is_automated(self):
