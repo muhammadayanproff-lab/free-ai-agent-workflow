@@ -19,6 +19,34 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Restore cached Qwen model
+        uses: actions/cache@v4
+        with:
+          path: models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+          key: qwen25-1.5b-q4km-${{ runner.os }}-v1
+      - name: Install optional CPU model runtime
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade huggingface_hub
+          python -m pip install --only-binary=:all: --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu "llama-cpp-python==0.3.16" || echo "llama-cpp-python wheel unavailable; agents will use hosted providers or Python fallbacks."
+      - name: Download public Qwen model if not cached
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from huggingface_hub import hf_hub_download
+          target = Path("models/qwen2.5-1.5b-instruct-q4_k_m.gguf")
+          if target.is_file() and target.stat().st_size > 900_000_000:
+              print(f"Using cached Qwen model ({target.stat().st_size} bytes).")
+          else:
+              target.parent.mkdir(parents=True, exist_ok=True)
+              downloaded = hf_hub_download(
+                  repo_id="Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+                  filename="qwen2.5-1.5b-instruct-q4_k_m.gguf",
+                  local_dir="models",
+              )
+              print(f"Downloaded Qwen model to {downloaded}")
+          PY
       - name: Download product discovery result from the triggering run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -41,12 +69,16 @@ jobs:
         run: python agents/prepare_product.py
       - name: Analyze Pakistan demand, competitors and creative examples
         env:
+          LOCAL_LLM_MODEL_PATH: models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+          LOCAL_LLM_THREADS: 4
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_TEXT_MODEL: gemini-3.8-flash
         run: python agents/market_analysis.py
       - name: Generate three AI campaign image concepts
         env:
+          LOCAL_LLM_MODEL_PATH: models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+          LOCAL_LLM_THREADS: 4
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_TEXT_MODEL: gemini-3.8-flash
@@ -55,6 +87,8 @@ jobs:
         run: python agents/image_campaign_creator.py
       - name: Analyze original product photos and create one video prompt
         env:
+          LOCAL_LLM_MODEL_PATH: models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+          LOCAL_LLM_THREADS: 4
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_VISION_MODEL: gemini-3.8-flash
@@ -62,6 +96,8 @@ jobs:
         run: python agents/video_prompt_agent.py
       - name: Write SEO package and four separate captions
         env:
+          LOCAL_LLM_MODEL_PATH: models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+          LOCAL_LLM_THREADS: 4
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_TEXT_MODEL: gemini-3.8-flash
