@@ -66,7 +66,7 @@ The single prompt must preserve the exact product identity, silhouette, proporti
             "Write IMAGE ANALYSIS stating that automated visual analysis is unavailable, "
             "then ONE FINAL VIDEO PROMPT for a 10-15 second vertical ecommerce video. "
             "Treat original supplier photos as strict references for the external video editor; "
-            "do not invent product details. Use only these listing facts:\\n"
+            "do not invent product details. Use only these listing facts:\n"
             + json.dumps(details, ensure_ascii=False)
         )
         local_answer = qwen_chat(text_only_prompt, max_tokens=1800)
