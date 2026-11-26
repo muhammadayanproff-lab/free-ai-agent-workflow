@@ -1,5 +1,10 @@
 name: Pakistan Product Discovery
 on:
+  push:
+    branches: [main]
+    paths:
+      - "agents/researcher.py"
+      - ".github/workflows/product_discovery.yml"
   workflow_dispatch:
   schedule:
     - cron: "0 9 * * *"
