@@ -5,6 +5,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from llm_fallback import groq_chat
+from local_llm import qwen_chat
 
 API_KEY=os.environ.get("GEMINI_API_KEY","").strip()
 MODEL=os.getenv("GEMINI_TEXT_MODEL","gemini-3.8-flash")
@@ -70,10 +71,33 @@ Visual analysis/video prompt: {visual[:5000]}
     if not isinstance(result, dict):
         result = groq_chat(prompt, max_tokens=5000, json_mode=True)
     if not isinstance(result, dict):
-        raise RuntimeError("Gemini and Groq copywriting providers failed. Check GROQ_API_KEY access and provider quotas.")
+        print("Hosted copywriting providers unavailable; trying local Qwen.")
+        result = qwen_chat(prompt, max_tokens=3000, json_mode=True)
+    product_name = str(product.get("title") or product.get("product_name") or product.get("name") or "this product").strip()
+    product_name = " ".join(product_name.split())[:160] or "this product"
+    local_fallback = {
+        "seo_title": f"{product_name} | Click & Collect Pakistan"[:65],
+        "meta_description": f"Explore {product_name} at Click & Collect. Check the product details and confirm current price, stock and checkout options before ordering."[:160],
+        "primary_keyword": product_name,
+        "secondary_keywords": [product_name, "Pakistan online shopping", "Click and Collect"],
+        "alt_text": f"Original supplier photo of {product_name}",
+        "instagram_image_caption": f"Discover {product_name}. Check the product details and current availability before ordering. #ClickAndCollect #PakistanShopping",
+        "facebook_image_caption": f"Looking for {product_name}? Explore the listing and review the details before placing your order. Check current availability and checkout options. #ClickAndCollect",
+        "instagram_video_caption": f"Take a closer look at {product_name}. Review the product details and confirm current availability before ordering. #ClickAndCollect #PakistanShopping",
+        "facebook_video_caption": f"See {product_name} in this product feature. Visit Click & Collect to review the listing and confirm current price, stock and checkout options.",
+        "image_hashtags": ["#ClickAndCollect", "#PakistanShopping", "#OnlineShopping"],
+        "video_hashtags": ["#ClickAndCollect", "#PakistanShopping", "#ProductVideo"],
+        "factuality_notes": ["Local fallback copy used; verify product facts, final price, stock and checkout terms before publishing."],
+    }
+    if not isinstance(result, dict):
+        result = {}
+    for key, value in local_fallback.items():
+        if not result.get(key):
+            result[key] = value
     required=["instagram_image_caption","facebook_image_caption","instagram_video_caption","facebook_video_caption","seo_title","meta_description"]
     missing=[k for k in required if not str(result.get(k,"")).strip()]
-    if missing: raise RuntimeError("Copywriter omitted required fields: "+", ".join(missing))
+    if missing:
+        raise RuntimeError("Copywriter could not build required fields: "+", ".join(missing))
     out=Path("campaign_copy"); out.mkdir(exist_ok=True)
     (out/"campaign_copy.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     lines=["# SEO & Campaign Captions","",f"## SEO title\n{result['seo_title']}","",f"## Meta description\n{result['meta_description']}","",f"## Primary keyword\n{result.get('primary_keyword','')}","",f"## Secondary keywords\n{', '.join(result.get('secondary_keywords',[]))}"]
