@@ -79,7 +79,12 @@ class RepositoryIntegrityTests(unittest.TestCase):
         self.assertIn('cron: "*/5 * * * *"', watcher)
         self.assertIn("agents/video_upload_watcher.py", watcher)
         self.assertIn("issue_comment:", publisher)
-        self.assertIn("github.event.comment.body == 'APPROVE'", publisher)
+        self.assertIn("startsWith(github.event.comment.body, 'APPROVE')", publisher)
+        self.assertIn('COMMENT_BODY: ${{ github.event.comment.body }}', publisher)
+        self.assertIn('os.environ.get("COMMENT_BODY", "").strip() != "APPROVE"', publisher)
+        self.assertIn("github.event.comment.user.login == github.repository_owner", publisher)
+        self.assertIn("github.event.issue.state == 'open'", publisher)
+        self.assertIn("github.event.issue.pull_request == null", publisher)
         self.assertIn("github.event.comment.user.login == github.repository_owner", publisher)
         self.assertTrue((ROOT / "agents" / "video_upload_watcher.py").is_file())
 
